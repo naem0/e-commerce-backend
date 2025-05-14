@@ -1,0 +1,46 @@
+const express = require("express")
+const router = express.Router()
+const {
+  getProducts,
+  getProduct,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  updateProductStatus,
+  addProductReview,
+  getProductVariants,
+  addProductVariant,
+  updateProductVariant,
+  deleteProductVariant,
+  updateVariationTypes,
+  bulkStockUpdate,
+} = require("../controllers/product.controller")
+const { protect, admin } = require("../middleware/auth.middleware")
+const upload = require("../middleware/upload.middleware")
+
+// Public routes
+router.get("/", getProducts)
+router.get("/:id", getProduct)
+router.get("/:id/variants", getProductVariants)
+
+// Protected routes
+router.post("/:id/reviews", protect, addProductReview)
+
+// Admin routes
+router.post("/", protect, admin, upload.array("images", 10), createProduct)
+router.put("/:id", protect, admin, upload.array("images", 10), updateProduct)
+router.delete("/:id", protect, admin, deleteProduct)
+router.patch("/:id/status", protect, admin, updateProductStatus)
+
+// Variant routes
+router.post("/:id/variants", protect, admin, upload.array("images", 10), addProductVariant)
+router.put("/:id/variants/:variantId", protect, admin, upload.array("images", 10), updateProductVariant)
+router.delete("/:id/variants/:variantId", protect, admin, deleteProductVariant)
+
+// Variation types routes
+router.put("/:id/variation-types", protect, admin, updateVariationTypes)
+
+// Bulk operations
+router.put("/bulk-stock-update", protect, admin, bulkStockUpdate)
+
+module.exports = router
