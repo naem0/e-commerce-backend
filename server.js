@@ -9,6 +9,7 @@ const productRoutes = require("./routes/product.routes")
 const categoryRoutes = require("./routes/category.routes")
 const brandRoutes = require("./routes/brand.routes")
 const orderRoutes = require("./routes/order.routes")
+const cartRoutes = require("./routes/cart.routes")
 const siteSettingsRoutes = require("./routes/siteSettings.routes")
 
 // Load env vars
@@ -37,6 +38,7 @@ app.use("/api/products", productRoutes)
 app.use("/api/categories", categoryRoutes)
 app.use("/api/brands", brandRoutes)
 app.use("/api/orders", orderRoutes)
+app.use("/api/cart", cartRoutes)
 app.use("/api/site-settings", siteSettingsRoutes)
 
 // Error handling middleware
