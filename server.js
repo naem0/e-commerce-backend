@@ -31,6 +31,11 @@ app.use(express.urlencoded({ extended: true }))
 // Static folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")))
 
+// home route
+app.get("/", (req, res) => {
+  res.send("API is running...")
+})
+
 // Routes
 app.use("/api/auth", authRoutes)
 app.use("/api/users", userRoutes)
