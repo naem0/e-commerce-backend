@@ -1,5 +1,28 @@
 const mongoose = require("mongoose")
 
+const customSectionSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  title: { type: String, required: true },
+  type: {
+    type: String,
+    required: true,
+    enum: ["best-sellers", "flash-sale", "category-best-sellers", "new-arrivals", "trending", "custom-products"],
+  },
+  enabled: { type: Boolean, default: true },
+  design: { type: String, default: "custom-1" },
+  order: { type: Number, required: true },
+  settings: {
+    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Category", default: null },
+    productIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+    limit: { type: Number, default: 8 },
+    showTimer: { type: Boolean, default: false },
+    endDate: { type: Date, default: null },
+    discountPercentage: { type: Number, default: 0 },
+    backgroundColor: { type: String, default: "#ffffff" },
+    textColor: { type: String, default: "#000000" },
+  },
+})
+
 const siteSettingsSchema = new mongoose.Schema(
   {
     siteName: {
@@ -54,6 +77,7 @@ const siteSettingsSchema = new mongoose.Schema(
           limit: { type: Number, default: 8 },
         },
       ],
+      customSections: [customSectionSchema],
       testimonials: {
         enabled: { type: Boolean, default: true },
         design: { type: String, default: "testimonials-1" },
@@ -107,9 +131,12 @@ const siteSettingsSchema = new mongoose.Schema(
 
 // Create a singleton pattern - only one settings document
 siteSettingsSchema.statics.getSiteSettings = async function () {
-  const settings = await this.findOne().populate(
-    "homePageSections.categoryProducts.categoryId homePageSections.featuredProducts.categoryId",
-  )
+  const settings = await this.findOne().populate([
+    "homePageSections.categoryProducts.categoryId",
+    "homePageSections.featuredProducts.categoryId",
+    "homePageSections.customSections.settings.categoryId",
+    "homePageSections.customSections.settings.productIds",
+  ])
   if (settings) {
     return settings
   }

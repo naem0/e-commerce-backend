@@ -10,7 +10,6 @@ exports.getSiteSettings = async (req, res) => {
       success: true,
       settings,
     })
-    console.log("Site settings retrieved successfully", settings)
   } catch (error) {
     console.error("Get site settings error:", error)
     res.status(500).json({
@@ -26,23 +25,7 @@ exports.getSiteSettings = async (req, res) => {
 // @access  Private/Admin
 exports.updateSiteSettings = async (req, res) => {
   try {
-    const {
-      siteName,
-      primaryColor,
-      secondaryColor,
-      heroDesign,
-      featuredDesign,
-      categoriesDesign,
-      testimonialsDesign,
-      productListDesign,
-      productDetailDesign,
-      cartDesign,
-      checkoutDesign,
-      footerDesign,
-      socialLinks,
-      contactInfo,
-      metaTags,
-    } = req.body
+    console.log("Updating site settings:", req.body)
 
     // Get current settings
     let settings = await SiteSettings.getSiteSettings()
@@ -60,34 +43,21 @@ exports.updateSiteSettings = async (req, res) => {
       }
     }
 
-    // Update settings
-    settings = await SiteSettings.findByIdAndUpdate(
-      settings._id,
-      {
-        siteName: siteName || settings.siteName,
-        logo,
-        favicon,
-        primaryColor: primaryColor || settings.primaryColor,
-        secondaryColor: secondaryColor || settings.secondaryColor,
-        heroDesign: heroDesign || settings.heroDesign,
-        featuredDesign: featuredDesign || settings.featuredDesign,
-        categoriesDesign: categoriesDesign || settings.categoriesDesign,
-        testimonialsDesign: testimonialsDesign || settings.testimonialsDesign,
-        productListDesign: productListDesign || settings.productListDesign,
-        productDetailDesign: productDetailDesign || settings.productDetailDesign,
-        cartDesign: cartDesign || settings.cartDesign,
-        checkoutDesign: checkoutDesign || settings.checkoutDesign,
-        footerDesign: footerDesign || settings.footerDesign,
-        socialLinks: socialLinks || settings.socialLinks,
-        contactInfo: contactInfo || settings.contactInfo,
-        metaTags: metaTags || settings.metaTags,
-      },
-      { new: true },
-    )
+    // Update settings with all provided data
+    const updateData = {
+      ...req.body,
+      logo,
+      favicon,
+    }
+
+    settings = await SiteSettings.findByIdAndUpdate(settings._id, updateData, { new: true, runValidators: true })
+
+    console.log("Settings updated successfully:", settings._id)
 
     res.status(200).json({
       success: true,
       settings,
+      message: "Settings updated successfully",
     })
   } catch (error) {
     console.error("Update site settings error:", error)
