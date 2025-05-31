@@ -4,10 +4,14 @@ const { getSiteSettings, updateSiteSettings } = require("../controllers/siteSett
 const { protect, admin } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
 
-// Public routes
+// @route   GET /api/site-settings
+// @desc    Get site settings
+// @access  Public
 router.get("/", getSiteSettings)
 
-// Admin routes
+// @route   PUT /api/site-settings
+// @desc    Update site settings
+// @access  Private/Admin
 router.put(
   "/",
   protect,
