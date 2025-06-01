@@ -1,17 +1,19 @@
 const jwt = require("jsonwebtoken")
 const User = require("../models/User")
 
-// Protect routes - verify token
+// Protect routes - require authentication
 exports.protect = async (req, res, next) => {
   try {
     let token
 
-    // Check if token exists in headers
+    // Get token from header
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
       token = req.headers.authorization.split(" ")[1]
     }
 
-    // Check if token exists
+    console.log("Auth middleware - Token received:", token ? "Yes" : "No")
+
+    // Make sure token exists
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -22,47 +24,61 @@ exports.protect = async (req, res, next) => {
     try {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      console.log("Decoded token:", decoded)
+      console.log("Auth middleware - Decoded token:", decoded)
 
       // Get user from token
-      req.user = await User.findById(decoded.id).select("-password")
+      const user = await User.findById(decoded.id).select("-password")
 
-      if (!req.user) {
+      if (!user) {
         return res.status(401).json({
           success: false,
           message: "User not found",
         })
       }
 
-      console.log("Authenticated user:", req.user.email, "Role:", req.user.role)
+      console.log("Auth middleware - User found:", user.email, "Role:", user.role)
+
+      req.user = user
       next()
     } catch (error) {
-      console.error("Token verification error:", error)
+      console.error("Auth middleware - Token verification error:", error)
       return res.status(401).json({
         success: false,
         message: "Not authorized to access this route",
       })
     }
   } catch (error) {
-    console.error("Auth middleware error:", error)
-    res.status(500).json({
+    console.error("Auth middleware - General error:", error)
+    return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
     })
   }
 }
 
-// Admin middleware
+// Admin only access
 exports.admin = (req, res, next) => {
-  console.log("Checking admin access for user:", req.user?.email, "Role:", req.user?.role)
+  console.log("Admin middleware - User:", req.user?.email, "Role:", req.user?.role)
 
   if (req.user && req.user.role === "admin") {
     next()
   } else {
     res.status(403).json({
       success: false,
-      message: "Not authorized as an admin",
+      message: "Access denied. Admin only.",
     })
+  }
+}
+
+// Authorize roles
+exports.authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `User role ${req.user.role} is not authorized to access this route`,
+      })
+    }
+    next()
   }
 }

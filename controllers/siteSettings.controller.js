@@ -25,10 +25,12 @@ exports.getSiteSettings = async (req, res) => {
 // @access  Private/Admin
 exports.updateSiteSettings = async (req, res) => {
   try {
-    console.log("Updating site settings:", req.body)
+    console.log("Update site settings - User:", req.user?.email, "Role:", req.user?.role)
+    console.log("Update site settings - Request body keys:", Object.keys(req.body))
 
     // Get current settings
     let settings = await SiteSettings.getSiteSettings()
+    console.log("Current settings ID:", settings._id)
 
     // Handle logo and favicon uploads
     let logo = settings.logo
@@ -50,7 +52,12 @@ exports.updateSiteSettings = async (req, res) => {
       favicon,
     }
 
-    settings = await SiteSettings.findByIdAndUpdate(settings._id, updateData, { new: true, runValidators: true })
+    console.log("Updating settings with data:", Object.keys(updateData))
+
+    settings = await SiteSettings.findByIdAndUpdate(settings._id, updateData, {
+      new: true,
+      runValidators: true,
+    })
 
     console.log("Settings updated successfully:", settings._id)
 
