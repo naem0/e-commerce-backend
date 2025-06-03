@@ -11,8 +11,6 @@ exports.protect = async (req, res, next) => {
       token = req.headers.authorization.split(" ")[1]
     }
 
-    console.log("Auth middleware - Token received:", token ? "Yes" : "No")
-
     // Make sure token exists
     if (!token) {
       return res.status(401).json({
@@ -24,7 +22,6 @@ exports.protect = async (req, res, next) => {
     try {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      console.log("Auth middleware - Decoded token:", decoded)
 
       // Get user from token
       const user = await User.findById(decoded.id).select("-password")
@@ -35,8 +32,6 @@ exports.protect = async (req, res, next) => {
           message: "User not found",
         })
       }
-
-      console.log("Auth middleware - User found:", user.email, "Role:", user.role)
 
       req.user = user
       next()
@@ -58,7 +53,6 @@ exports.protect = async (req, res, next) => {
 
 // Admin only access
 exports.admin = (req, res, next) => {
-  console.log("Admin middleware - User:", req.user?.email, "Role:", req.user?.role)
 
   if (req.user && req.user.role === "admin") {
     next()
