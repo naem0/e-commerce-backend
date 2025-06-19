@@ -50,6 +50,7 @@ app.use("/api/site-settings", siteSettingsRoutes)
 app.use("/api/testimonials", testimonialRoutes)
 app.use("/api/banners", bannerRoutes)
 
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack)
