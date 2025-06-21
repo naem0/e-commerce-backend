@@ -143,7 +143,6 @@ exports.getOrder = async (req, res) => {
 exports.createOrder = async (req, res) => {
   try {
     const { items, shippingAddress, paymentMethod, paymentDetails, notes } = req.body
-
     if (!items || items.length === 0) {
       return res.status(400).json({
         success: false,
@@ -157,7 +156,6 @@ exports.createOrder = async (req, res) => {
 
     for (const item of items) {
       const product = await Product.findById(item.product)
-
       if (!product) {
         return res.status(404).json({
           success: false,
@@ -196,7 +194,7 @@ exports.createOrder = async (req, res) => {
 
     // Create order
     const order = await Order.create({
-      user: req.user.id,
+      user: req?.user?.id ?? null, // Use logged-in user or null for guest checkout
       items: orderItems,
       shippingAddress,
       paymentMethod,
