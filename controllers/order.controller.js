@@ -105,7 +105,7 @@ exports.getMyOrders = async (req, res) => {
 exports.getOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate("user", "name email")
+      .populate("user", "name email phone")
       .populate("items.product", "name slug images")
 
     if (!order) {
@@ -141,9 +141,9 @@ exports.getOrder = async (req, res) => {
 // @route   POST /api/orders
 // @access  Private
 exports.createOrder = async (req, res) => {
-  console.log("Creating order with body:", req)
   try {
     const { items, shippingAddress, paymentMethod, paymentDetails, notes } = req.body
+
     if (!items || items.length === 0) {
       return res.status(400).json({
         success: false,
@@ -157,6 +157,7 @@ exports.createOrder = async (req, res) => {
 
     for (const item of items) {
       const product = await Product.findById(item.product)
+
       if (!product) {
         return res.status(404).json({
           success: false,
@@ -179,6 +180,7 @@ exports.createOrder = async (req, res) => {
         name: product.name,
         price,
         quantity: item.quantity,
+        image: product.images?.[0] || "",
       })
 
       subtotal += price * item.quantity
@@ -195,7 +197,7 @@ exports.createOrder = async (req, res) => {
 
     // Create order
     const order = await Order.create({
-      user: req?.user?.id ?? null, // Use logged-in user or null for guest checkout
+      user: req.user.id,
       items: orderItems,
       shippingAddress,
       paymentMethod,
@@ -204,6 +206,7 @@ exports.createOrder = async (req, res) => {
       tax,
       shippingCost,
       total,
+      paidAmount: paymentMethod === "cod" ? 0 : 0, // COD starts with 0 paid
       notes,
     })
 
@@ -213,6 +216,67 @@ exports.createOrder = async (req, res) => {
     })
   } catch (error) {
     console.error("Create order error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Add partial payment
+// @route   POST /api/orders/:id/payments
+// @access  Private/Admin
+exports.addPartialPayment = async (req, res) => {
+  try {
+    const { amount, method, transactionId, phoneNumber, notes } = req.body
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment amount",
+      })
+    }
+
+    const order = await Order.findById(req.params.id)
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    // Check if payment amount exceeds due amount
+    if (amount > order.dueAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Payment amount cannot exceed due amount of $${order.dueAmount}`,
+      })
+    }
+
+    // Add payment to payments array
+    order.payments.push({
+      amount,
+      method,
+      transactionId,
+      phoneNumber,
+      notes,
+      status: "confirmed",
+    })
+
+    // Update paid amount
+    order.paidAmount += amount
+
+    await order.save()
+
+    res.status(200).json({
+      success: true,
+      message: "Payment added successfully",
+      order,
+    })
+  } catch (error) {
+    console.error("Add partial payment error:", error)
     res.status(500).json({
       success: false,
       message: "Server error",
@@ -253,15 +317,16 @@ exports.updateOrderStatus = async (req, res) => {
           await product.save()
         }
       }
+      order.cancelledAt = new Date()
+    }
+
+    // If order is delivered
+    if (status === "delivered") {
+      order.deliveredAt = new Date()
     }
 
     // Update order status
     order.status = status
-
-    // If order is delivered, update payment status to paid
-    if (status === "delivered") {
-      order.paymentStatus = "paid"
-    }
 
     await order.save()
 
@@ -286,7 +351,7 @@ exports.updatePaymentStatus = async (req, res) => {
   try {
     const { paymentStatus, transactionId } = req.body
 
-    if (!paymentStatus || !["pending", "paid", "failed"].includes(paymentStatus)) {
+    if (!paymentStatus || !["pending", "partial", "paid", "failed"].includes(paymentStatus)) {
       return res.status(400).json({
         success: false,
         message: "Invalid payment status value",
