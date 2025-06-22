@@ -141,6 +141,7 @@ exports.getOrder = async (req, res) => {
 // @route   POST /api/orders
 // @access  Private
 exports.createOrder = async (req, res) => {
+  console.log("Creating order with body:", req)
   try {
     const { items, shippingAddress, paymentMethod, paymentDetails, notes } = req.body
     if (!items || items.length === 0) {

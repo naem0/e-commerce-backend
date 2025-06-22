@@ -14,7 +14,7 @@ const { protect, admin } = require("../middleware/auth.middleware")
 router.get("/", protect, admin, getOrders)
 router.get("/my-orders", protect, getMyOrders)
 router.get("/:id", protect, getOrder)
-router.post("/", createOrder)
+router.post("/", protect, createOrder)
 router.patch("/:id/status", protect, admin, updateOrderStatus)
 router.patch("/:id/payment", protect, admin, updatePaymentStatus)
 
