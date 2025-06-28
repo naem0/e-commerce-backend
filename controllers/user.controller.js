@@ -1,5 +1,33 @@
 const User = require("../models/User")
 
+// @desc    Get current user profile
+// @route   GET /api/users/profile
+// @access  Private
+exports.getUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password")
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    res.status(200).json({
+      success: true,
+      user,
+    })
+  } catch (error) {
+    console.error("Get user profile error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Private/Admin
@@ -159,11 +187,11 @@ exports.deleteUser = async (req, res) => {
 }
 
 // @desc    Update user profile
-// @route   PUT /api/users/profile/update
+// @route   PUT /api/users/profile
 // @access  Private
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, email, phone, address, currentPassword, newPassword } = req.body
+    const { name, email, phone, addresses, dateOfBirth, gender, currentPassword, newPassword } = req.body
 
     // Find user
     const user = await User.findById(req.user.id).select("+password")
@@ -189,13 +217,12 @@ exports.updateProfile = async (req, res) => {
     user.name = name || user.name
     user.email = email || user.email
     user.phone = phone || user.phone
+    user.dateOfBirth = dateOfBirth || user.dateOfBirth
+    user.gender = gender || user.gender
 
-    // Update address if provided
-    if (address) {
-      user.address = {
-        ...user.address,
-        ...address,
-      }
+    // Update addresses if provided
+    if (addresses) {
+      user.addresses = addresses
     }
 
     // Update password if provided
