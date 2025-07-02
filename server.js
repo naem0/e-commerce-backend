@@ -13,6 +13,8 @@ const cartRoutes = require("./routes/cart.routes")
 const siteSettingsRoutes = require("./routes/siteSettings.routes")
 const testimonialRoutes = require("./routes/testimonial.routes")
 const bannerRoutes = require("./routes/banner.routes")
+const analyticsRoutes = require("./routes/analytics.routes")
+const wishlistRoutes = require("./routes/wishlist.routes")
 
 // Load env vars
 dotenv.config()
@@ -49,6 +51,8 @@ app.use("/api/cart", cartRoutes)
 app.use("/api/site-settings", siteSettingsRoutes)
 app.use("/api/testimonials", testimonialRoutes)
 app.use("/api/banners", bannerRoutes)
+app.use("/api/analytics", analyticsRoutes)
+app.use("/api/wishlist", wishlistRoutes)
 
 
 // Error handling middleware
