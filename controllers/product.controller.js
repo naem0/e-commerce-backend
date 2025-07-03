@@ -29,69 +29,84 @@ exports.getProducts = async (req, res) => {
       maxPrice,
       search,
       tag,
-    } = req.query
+    } = req.query;
 
     // Build query
-    const query = {}
+    const query = {};
 
     // Filter by status
     if (status && status !== "all") {
-      query.status = status
+      query.status = status;
     }
 
-    // Filter by category
+    // Filter by category (validate ObjectId)
     if (category) {
-      query.category = category
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        query.category = new mongoose.Types.ObjectId(category);
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid category ID",
+        });
+      }
     }
 
-    // Filter by brand
+    // Filter by brand (validate ObjectId)
     if (brand) {
-      query.brand = brand
+      if (mongoose.Types.ObjectId.isValid(brand)) {
+        query.brand = new mongoose.Types.ObjectId(brand);
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid brand ID",
+        });
+      }
     }
 
     // Filter by featured
-    if (featured) {
-      query.featured = featured === "true"
+    if (featured !== undefined) {
+      query.featured = featured === "true";
     }
 
     // Filter by price range
     if (minPrice && maxPrice) {
-      query.price = { $gte: Number(minPrice), $lte: Number(maxPrice) }
+      query.price = { $gte: Number(minPrice), $lte: Number(maxPrice) };
     } else if (minPrice) {
-      query.price = { $gte: Number(minPrice) }
+      query.price = { $gte: Number(minPrice) };
     } else if (maxPrice) {
-      query.price = { $lte: Number(maxPrice) }
+      query.price = { $lte: Number(maxPrice) };
     }
 
     // Filter by tag
     if (tag) {
-      query.tags = tag
+      query.tags = tag;
     }
 
     // Search by name or description
     if (search) {
-      query.$text = { $search: search }
+      query.$text = { $search: search };
     }
 
     // Count total documents
-    const total = await Product.countDocuments(query)
+    const total = await Product.countDocuments(query);
 
-    // Calculate pagination
-    const skip = (Number(page) - 1) * Number(limit)
-    const totalPages = Math.ceil(total / Number(limit))
+    // Pagination
+    const skip = (Number(page) - 1) * Number(limit);
+    const totalPages = Math.ceil(total / Number(limit));
 
-    // Sort options
-    const sortOptions = {}
-    sortOptions[sort] = order === "asc" ? 1 : -1
+    // Sorting
+    const sortOptions = {};
+    sortOptions[sort] = order === "asc" ? 1 : -1;
 
-    // Execute query
+    // Fetch products
     const products = await Product.find(query)
       .populate("category", "name")
       .populate("brand", "name logo")
       .sort(sortOptions)
       .skip(skip)
-      .limit(Number(limit))
+      .limit(Number(limit));
 
+    // Response
     res.status(200).json({
       success: true,
       count: products.length,
@@ -99,16 +114,17 @@ exports.getProducts = async (req, res) => {
       totalPages,
       currentPage: Number(page),
       products,
-    })
+    });
   } catch (error) {
-    console.error("Get products error:", error)
+    console.error("Get products error:", error);
     res.status(500).json({
       success: false,
       message: "Server error",
       error: error.message,
-    })
+    });
   }
-}
+};
+
 
 // @desc    Get single product
 // @route   GET /api/products/:id
