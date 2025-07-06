@@ -54,6 +54,7 @@ app.use("/api/banners", bannerRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/wishlist", wishlistRoutes)
 
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack)
