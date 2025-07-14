@@ -1,4 +1,5 @@
 const mongoose = require("mongoose")
+const mongoosePaginate = require("mongoose-paginate-v2")
 
 const brandSchema = new mongoose.Schema(
   {
@@ -16,6 +17,7 @@ const brandSchema = new mongoose.Schema(
     },
     description: {
       type: String,
+      trim: true,
     },
     logo: {
       type: String,
@@ -28,11 +30,32 @@ const brandSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    featured: {
+      type: Boolean,
+      default: false,
+    },
+    sortOrder: {
+      type: Number,
+      default: 0,
+    },
+    seo: {
+      title: { type: String },
+      description: { type: String },
+      keywords: [{ type: String }],
+    },
   },
   {
     timestamps: true,
   },
 )
+
+// Add pagination plugin
+brandSchema.plugin(mongoosePaginate)
+
+// Create index for search
+brandSchema.index({ name: "text", description: "text" })
+brandSchema.index({ slug: 1 })
+brandSchema.index({ status: 1 })
 
 const Brand = mongoose.model("Brand", brandSchema)
 

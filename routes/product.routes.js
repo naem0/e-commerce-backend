@@ -3,6 +3,7 @@ const router = express.Router()
 const {
   getProducts,
   getProduct,
+  getProductBySlug,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -14,14 +15,21 @@ const {
   deleteProductVariant,
   updateVariationTypes,
   bulkStockUpdate,
+  searchProducts,
+  getFeaturedProducts,
+  getRelatedProducts,
 } = require("../controllers/product.controller")
 const { protect, admin } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
 
 // Public routes
 router.get("/", getProducts)
+router.get("/search", searchProducts)
+router.get("/featured", getFeaturedProducts)
+router.get("/slug/:slug", getProductBySlug)
 router.get("/:id", getProduct)
 router.get("/:id/variants", getProductVariants)
+router.get("/:id/related", getRelatedProducts)
 
 // Protected routes
 router.post("/:id/reviews", protect, addProductReview)

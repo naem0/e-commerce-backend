@@ -1,4 +1,13 @@
 const mongoose = require("mongoose")
+const mongoosePaginate = require("mongoose-paginate-v2")
+
+// Helper function to create slug from name
+const createSlug = (name) => {
+  return name
+    .toLowerCase()
+    .replace(/[^\w ]+/g, "")
+    .replace(/ +/g, "-")
+}
 
 // Variation Option Schema (e.g. "Red", "Blue" for color)
 const variationOptionSchema = new mongoose.Schema({
@@ -73,7 +82,6 @@ const productSchema = new mongoose.Schema(
     },
     slug: {
       type: String,
-      required: true,
       unique: true,
       lowercase: true,
     },
@@ -166,14 +174,39 @@ const productSchema = new mongoose.Schema(
       freeShipping: { type: Boolean, default: false },
       shippingClass: { type: String },
     },
+    views: {
+      type: Number,
+      default: 0,
+    },
+    // Add createdBy field
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     timestamps: true,
   },
 )
 
+// Pre-save middleware to generate slug
+productSchema.pre("save", function (next) {
+  if (this.isModified("name") || this.isNew) {
+    this.slug = createSlug(this.name)
+  }
+  next()
+})
+
+// Add pagination plugin
+productSchema.plugin(mongoosePaginate)
+
 // Create index for search
 productSchema.index({ name: "text", description: "text", tags: "text" })
+productSchema.index({ slug: 1 })
+productSchema.index({ status: 1 })
+productSchema.index({ featured: 1 })
+productSchema.index({ category: 1 })
+productSchema.index({ brand: 1 })
 
 const Product = mongoose.model("Product", productSchema)
 

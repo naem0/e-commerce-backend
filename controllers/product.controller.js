@@ -1,7 +1,9 @@
 const Product = require("../models/Product")
 const Category = require("../models/Category")
 const Brand = require("../models/Brand")
-const mongoose = require("mongoose")
+const upload = require("../middleware/upload.middleware")
+const path = require("path")
+const fs = require("fs")
 
 // Helper function to create slug from name
 const createSlug = (name) => {
@@ -18,113 +20,102 @@ exports.getProducts = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 10,
-      sort = "createdAt",
-      order = "desc",
-      status,
+      limit = 12,
+      search,
       category,
       brand,
+      status,
       featured,
       minPrice,
       maxPrice,
-      search,
-      tag,
-    } = req.query;
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      tags,
+    } = req.query
 
     // Build query
-    const query = {};
+    const query = {}
 
-    // Filter by status
-    if (status && status !== "all") {
-      query.status = status;
-    }
-
-    // Filter by category (validate ObjectId)
-    if (category) {
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        query.category = new mongoose.Types.ObjectId(category);
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid category ID",
-        });
-      }
-    }
-
-    // Filter by brand (validate ObjectId)
-    if (brand) {
-      if (mongoose.Types.ObjectId.isValid(brand)) {
-        query.brand = new mongoose.Types.ObjectId(brand);
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid brand ID",
-        });
-      }
-    }
-
-    // Filter by featured
-    if (featured !== undefined) {
-      query.featured = featured === "true";
-    }
-
-    // Filter by price range
-    if (minPrice && maxPrice) {
-      query.price = { $gte: Number(minPrice), $lte: Number(maxPrice) };
-    } else if (minPrice) {
-      query.price = { $gte: Number(minPrice) };
-    } else if (maxPrice) {
-      query.price = { $lte: Number(maxPrice) };
-    }
-
-    // Filter by tag
-    if (tag) {
-      query.tags = tag;
-    }
-
-    // Search by name or description
     if (search) {
-      query.$text = { $search: search };
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { shortDescription: { $regex: search, $options: "i" } },
+        { tags: { $in: [new RegExp(search, "i")] } },
+      ]
     }
 
-    // Count total documents
-    const total = await Product.countDocuments(query);
+    if (category) {
+      query.category = category
+    }
 
-    // Pagination
-    const skip = (Number(page) - 1) * Number(limit);
-    const totalPages = Math.ceil(total / Number(limit));
+    if (brand) {
+      query.brand = brand
+    }
 
-    // Sorting
-    const sortOptions = {};
-    sortOptions[sort] = order === "asc" ? 1 : -1;
+    if (status) {
+      query.status = status
+    }
 
-    // Fetch products
-    const products = await Product.find(query)
-      .populate("category", "name")
-      .populate("brand", "name logo")
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit));
+    if (featured !== undefined) {
+      query.featured = featured === "true"
+    }
 
-    // Response
-    res.status(200).json({
+    if (minPrice || maxPrice) {
+      query.price = {}
+      if (minPrice) query.price.$gte = Number.parseFloat(minPrice)
+      if (maxPrice) query.price.$lte = Number.parseFloat(maxPrice)
+    }
+
+    if (tags) {
+      const tagArray = tags.split(",").map((tag) => tag.trim())
+      query.tags = { $in: tagArray }
+    }
+
+    // Execute query with pagination
+    const options = {
+      page: Number.parseInt(page),
+      limit: Number.parseInt(limit),
+      sort: { [sortBy]: sortOrder === "desc" ? -1 : 1 },
+      populate: [
+        {
+          path: "category",
+          select: "name slug",
+        },
+        {
+          path: "brand",
+          select: "name logo",
+        },
+        {
+          path: "createdBy",
+          select: "name email",
+        },
+      ],
+    }
+
+    const result = await Product.paginate(query, options)
+
+    res.json({
       success: true,
-      count: products.length,
-      total,
-      totalPages,
-      currentPage: Number(page),
-      products,
-    });
+      products: result.docs,
+      pagination: {
+        currentPage: result.page,
+        totalPages: result.totalPages,
+        totalItems: result.totalDocs,
+        itemsPerPage: result.limit,
+        hasNextPage: result.hasNextPage,
+        hasPrevPage: result.hasPrevPage,
+      },
+    })
   } catch (error) {
-    console.error("Get products error:", error);
+    console.error("Get products error:", error)
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Failed to fetch products",
       error: error.message,
-    });
+    })
   }
-};
-
+}
 
 // @desc    Get single product
 // @route   GET /api/products/:id
@@ -133,7 +124,8 @@ exports.getProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
       .populate("category", "name slug")
-      .populate("brand", "name logo website")
+      .populate("brand", "name logo")
+      .populate("createdBy", "name email")
 
     if (!product) {
       return res.status(404).json({
@@ -142,7 +134,11 @@ exports.getProduct = async (req, res) => {
       })
     }
 
-    res.status(200).json({
+    // Increment view count
+    product.views = (product.views || 0) + 1
+    await product.save()
+
+    res.json({
       success: true,
       product,
     })
@@ -150,7 +146,42 @@ exports.getProduct = async (req, res) => {
     console.error("Get product error:", error)
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Failed to fetch product",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Get single product by slug
+// @route   GET /api/products/slug/:slug
+// @access  Public
+exports.getProductBySlug = async (req, res) => {
+  try {
+    const product = await Product.findOne({ slug: req.params.slug, status: "published" })
+      .populate("category", "name slug")
+      .populate("brand", "name logo")
+      .populate("createdBy", "name email")
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      })
+    }
+
+    // Increment view count
+    product.views = (product.views || 0) + 1
+    await product.save()
+
+    res.json({
+      success: true,
+      product,
+    })
+  } catch (error) {
+    console.error("Get product by slug error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch product",
       error: error.message,
     })
   }
@@ -176,18 +207,15 @@ exports.createProduct = async (req, res) => {
       weight,
       dimensions,
       tags,
+      seo,
+      shipping,
       hasVariations,
       variationTypes,
       variants,
-      seo,
-      shipping,
     } = req.body
 
-    // Create slug from name
-    const slug = createSlug(name)
-
-    // Check if product with this slug already exists
-    const existingProduct = await Product.findOne({ slug })
+    // Check if product already exists
+    const existingProduct = await Product.findOne({ name })
     if (existingProduct) {
       return res.status(400).json({
         success: false,
@@ -195,133 +223,157 @@ exports.createProduct = async (req, res) => {
       })
     }
 
-    // Check if category exists
-    const categoryExists = await Category.findById(category)
-    if (!categoryExists) {
-      return res.status(400).json({
-        success: false,
-        message: "Category not found",
-      })
+    // Validate category
+    if (category) {
+      const categoryExists = await Category.findById(category)
+      if (!categoryExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid category",
+        })
+      }
     }
 
-    // Check if brand exists if provided
+    // Validate brand
     if (brand) {
       const brandExists = await Brand.findById(brand)
       if (!brandExists) {
         return res.status(400).json({
           success: false,
-          message: "Brand not found",
+          message: "Invalid brand",
         })
       }
     }
 
-    // Handle images
-    let images = []
-    if (req.files) {
-      images = req.files.map((file) => `/uploads/${file.filename}`)
-    } else if (req.body.images) {
-      // Handle images sent as strings (e.g. from frontend)
-      if (typeof req.body.images === "string") {
-        images = [req.body.images]
-      } else {
-        images = req.body.images
-      }
-    }
-
-    // Parse dimensions if provided
-    let parsedDimensions = null
-    if (dimensions) {
-      if (typeof dimensions === "string") {
-        parsedDimensions = JSON.parse(dimensions)
-      } else {
-        parsedDimensions = dimensions
-      }
-    }
-
-    // Parse tags if provided
-    let parsedTags = []
-    if (tags) {
-      if (typeof tags === "string") {
-        parsedTags = tags.split(",").map((tag) => tag.trim())
-      } else if (Array.isArray(tags)) {
-        parsedTags = tags
-      }
-    }
-
-    // Parse variation types if provided
-    let parsedVariationTypes = []
-    if (variationTypes && hasVariations) {
-      if (typeof variationTypes === "string") {
-        parsedVariationTypes = JSON.parse(variationTypes)
-      } else {
-        parsedVariationTypes = variationTypes
-      }
-    }
-
-    // Parse variants if provided
-    let parsedVariants = []
-    if (variants && hasVariations) {
-      if (typeof variants === "string") {
-        parsedVariants = JSON.parse(variants)
-      } else {
-        parsedVariants = variants
-      }
-    }
-
-    // Parse SEO if provided
-    let parsedSeo = {}
-    if (seo) {
-      if (typeof seo === "string") {
-        parsedSeo = JSON.parse(seo)
-      } else {
-        parsedSeo = seo
-      }
-    }
-
-    // Parse shipping if provided
-    let parsedShipping = {}
-    if (shipping) {
-      if (typeof shipping === "string") {
-        parsedShipping = JSON.parse(shipping)
-      } else {
-        parsedShipping = shipping
-      }
-    }
-
-    // Create product
-    const product = await Product.create({
+    // Create product data
+    const productData = {
       name,
-      slug,
       description,
-      shortDescription: shortDescription || "",
-      price: Number(price),
-      comparePrice: comparePrice ? Number(comparePrice) : 0,
+      shortDescription,
+      price: Number.parseFloat(price),
       category,
-      brand: brand || null,
-      stock: Number(stock),
-      images,
+      brand,
+      stock: Number.parseInt(stock),
       featured: featured === "true" || featured === true,
       status: status || "draft",
-      sku: sku || "",
-      weight: weight ? Number(weight) : null,
-      dimensions: parsedDimensions,
-      tags: parsedTags,
+      sku,
+      weight: weight ? Number.parseFloat(weight) : undefined,
+      createdBy: req.user.id,
       hasVariations: hasVariations === "true" || hasVariations === true,
-      variationTypes: parsedVariationTypes,
-      variants: parsedVariants,
-      seo: parsedSeo,
-      shipping: parsedShipping,
-    })
+    }
+
+    // Add optional fields
+    if (comparePrice) {
+      productData.comparePrice = Number.parseFloat(comparePrice)
+    }
+
+    if (dimensions) {
+      try {
+        productData.dimensions = typeof dimensions === "string" ? JSON.parse(dimensions) : dimensions
+      } catch (e) {
+        console.error("Invalid dimensions format:", e)
+      }
+    }
+
+    if (tags) {
+      try {
+        productData.tags = typeof tags === "string" ? JSON.parse(tags) : tags
+      } catch (e) {
+        // If JSON parse fails, try splitting by comma
+        productData.tags = typeof tags === "string" ? tags.split(",").map((tag) => tag.trim()) : tags
+      }
+    }
+
+    if (seo) {
+      try {
+        productData.seo = typeof seo === "string" ? JSON.parse(seo) : seo
+      } catch (e) {
+        console.error("Invalid SEO format:", e)
+      }
+    }
+
+    if (shipping) {
+      try {
+        productData.shipping = typeof shipping === "string" ? JSON.parse(shipping) : shipping
+      } catch (e) {
+        console.error("Invalid shipping format:", e)
+      }
+    }
+
+    // Handle main product images
+    if (req.files && req.files.length > 0) {
+      productData.images = req.files.map((file) => `/uploads/${file.filename}`)
+    }
+
+    // Handle variations
+    if (productData.hasVariations) {
+      if (variationTypes) {
+        try {
+          productData.variationTypes = typeof variationTypes === "string" ? JSON.parse(variationTypes) : variationTypes
+        } catch (e) {
+          console.error("Invalid variationTypes format:", e)
+        }
+      }
+
+      if (variants) {
+        try {
+          const parsedVariants = typeof variants === "string" ? JSON.parse(variants) : variants
+          productData.variants = parsedVariants.map((variant, index) => {
+            const variantData = {
+              ...variant,
+              price: Number.parseFloat(variant.price),
+              stock: Number.parseInt(variant.stock),
+            }
+
+            if (variant.comparePrice) {
+              variantData.comparePrice = Number.parseFloat(variant.comparePrice)
+            }
+
+            // Handle variant images
+            const variantImageField = `variantImages_${index}`
+            if (req.files && req.files[variantImageField]) {
+              variantData.images = req.files[variantImageField].map((file) => `/uploads/${file.filename}`)
+            }
+
+            return variantData
+          })
+        } catch (e) {
+          console.error("Invalid variants format:", e)
+        }
+      }
+    }
+
+    const product = new Product(productData)
+    await product.save()
+
+    // Populate the created product
+    await product.populate([
+      { path: "category", select: "name slug" },
+      { path: "brand", select: "name logo" },
+      { path: "createdBy", select: "name email" },
+    ])
 
     res.status(201).json({
       success: true,
+      message: "Product created successfully",
       product,
     })
   } catch (error) {
     console.error("Create product error:", error)
+
+    // Clean up uploaded files if error occurs
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        const filePath = path.join(__dirname, "../uploads", file.filename)
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath)
+        }
+      })
+    }
+
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Failed to create product",
       error: error.message,
     })
   }
@@ -347,15 +399,14 @@ exports.updateProduct = async (req, res) => {
       weight,
       dimensions,
       tags,
+      seo,
+      shipping,
       hasVariations,
       variationTypes,
       variants,
-      seo,
-      shipping,
     } = req.body
 
-    // Find product
-    let product = await Product.findById(req.params.id)
+    const product = await Product.findById(req.params.id)
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -363,13 +414,9 @@ exports.updateProduct = async (req, res) => {
       })
     }
 
-    // Update slug if name is changed
-    let slug = product.slug
+    // Check if name is being changed and if it already exists
     if (name && name !== product.name) {
-      slug = createSlug(name)
-
-      // Check if another product with this slug already exists
-      const existingProduct = await Product.findOne({ slug, _id: { $ne: req.params.id } })
+      const existingProduct = await Product.findOne({ name, _id: { $ne: req.params.id } })
       if (existingProduct) {
         return res.status(400).json({
           success: false,
@@ -378,142 +425,166 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    // Check if category exists if it's being updated
-    if (category && category !== product.category.toString()) {
+    // Validate category
+    if (category && category !== product.category?.toString()) {
       const categoryExists = await Category.findById(category)
       if (!categoryExists) {
         return res.status(400).json({
           success: false,
-          message: "Category not found",
+          message: "Invalid category",
         })
       }
     }
 
-    // Check if brand exists if it's being updated
+    // Validate brand
     if (brand && brand !== product.brand?.toString()) {
       const brandExists = await Brand.findById(brand)
       if (!brandExists) {
         return res.status(400).json({
           success: false,
-          message: "Brand not found",
+          message: "Invalid brand",
         })
       }
     }
 
-    // Handle images
-    let images = product.images
-    if (req.files && req.files.length > 0) {
-      images = req.files.map((file) => `/uploads/${file.filename}`)
-    } else if (req.body.images) {
-      // Handle images sent as strings (e.g. from frontend)
-      if (typeof req.body.images === "string") {
-        images = [req.body.images]
-      } else {
-        images = req.body.images
-      }
+    // Update product data
+    const updateData = {
+      name: name || product.name,
+      description: description || product.description,
+      shortDescription: shortDescription || product.shortDescription,
+      price: price ? Number.parseFloat(price) : product.price,
+      category: category || product.category,
+      brand: brand || product.brand,
+      stock: stock ? Number.parseInt(stock) : product.stock,
+      featured: featured !== undefined ? featured === "true" || featured === true : product.featured,
+      status: status || product.status,
+      sku: sku || product.sku,
+      weight: weight ? Number.parseFloat(weight) : product.weight,
+      updatedAt: new Date(),
+      hasVariations:
+        hasVariations !== undefined ? hasVariations === "true" || hasVariations === true : product.hasVariations,
     }
 
-    // Parse dimensions if provided
-    let parsedDimensions = product.dimensions
+    // Add optional fields
+    if (comparePrice !== undefined) {
+      updateData.comparePrice = comparePrice ? Number.parseFloat(comparePrice) : null
+    }
+
     if (dimensions) {
-      if (typeof dimensions === "string") {
-        parsedDimensions = JSON.parse(dimensions)
-      } else {
-        parsedDimensions = dimensions
+      try {
+        updateData.dimensions = typeof dimensions === "string" ? JSON.parse(dimensions) : dimensions
+      } catch (e) {
+        console.error("Invalid dimensions format:", e)
       }
     }
 
-    // Parse tags if provided
-    let parsedTags = product.tags || []
     if (tags) {
-      if (typeof tags === "string") {
-        parsedTags = tags.split(",").map((tag) => tag.trim())
-      } else if (Array.isArray(tags)) {
-        parsedTags = tags
+      try {
+        updateData.tags = typeof tags === "string" ? JSON.parse(tags) : tags
+      } catch (e) {
+        // If JSON parse fails, try splitting by comma
+        updateData.tags = typeof tags === "string" ? tags.split(",").map((tag) => tag.trim()) : tags
       }
     }
 
-    // Parse variation types if provided
-    let parsedVariationTypes = product.variationTypes || []
-    if (variationTypes && (hasVariations === "true" || hasVariations === true)) {
-      if (typeof variationTypes === "string") {
-        parsedVariationTypes = JSON.parse(variationTypes)
-      } else {
-        parsedVariationTypes = variationTypes
-      }
-    }
-
-    // Parse variants if provided
-    let parsedVariants = product.variants || []
-    if (variants && (hasVariations === "true" || hasVariations === true)) {
-      if (typeof variants === "string") {
-        parsedVariants = JSON.parse(variants)
-      } else {
-        parsedVariants = variants
-      }
-    }
-
-    // Parse SEO if provided
-    let parsedSeo = product.seo || {}
     if (seo) {
-      if (typeof seo === "string") {
-        parsedSeo = JSON.parse(seo)
-      } else {
-        parsedSeo = seo
+      try {
+        updateData.seo = typeof seo === "string" ? JSON.parse(seo) : seo
+      } catch (e) {
+        console.error("Invalid SEO format:", e)
       }
     }
 
-    // Parse shipping if provided
-    let parsedShipping = product.shipping || {}
     if (shipping) {
-      if (typeof shipping === "string") {
-        parsedShipping = JSON.parse(shipping)
-      } else {
-        parsedShipping = shipping
+      try {
+        updateData.shipping = typeof shipping === "string" ? JSON.parse(shipping) : shipping
+      } catch (e) {
+        console.error("Invalid shipping format:", e)
       }
     }
 
-    // Update product
-    product = await Product.findByIdAndUpdate(
-      req.params.id,
-      {
-        name: name || product.name,
-        slug,
-        description: description || product.description,
-        shortDescription: shortDescription || product.shortDescription,
-        price: price ? Number(price) : product.price,
-        comparePrice: comparePrice ? Number(comparePrice) : product.comparePrice,
-        category: category || product.category,
-        brand: brand === "null" ? null : brand || product.brand,
-        stock: stock ? Number(stock) : product.stock,
-        images,
-        featured: featured !== undefined ? featured === "true" || featured === true : product.featured,
-        status: status || product.status,
-        sku: sku || product.sku,
-        weight: weight ? Number(weight) : product.weight,
-        dimensions: parsedDimensions,
-        tags: parsedTags,
-        hasVariations:
-          hasVariations !== undefined ? hasVariations === "true" || hasVariations === true : product.hasVariations,
-        variationTypes: parsedVariationTypes,
-        variants: parsedVariants,
-        seo: parsedSeo,
-        shipping: parsedShipping,
-      },
-      { new: true },
-    )
-      .populate("category", "name")
-      .populate("brand", "name logo")
+    // Handle main product images
+    if (req.files && req.files.length > 0) {
+      // Delete old images
+      if (product.images && product.images.length > 0) {
+        product.images.forEach((imagePath) => {
+          const fullPath = path.join(__dirname, "..", imagePath)
+          if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath)
+          }
+        })
+      }
+      updateData.images = req.files.map((file) => `/uploads/${file.filename}`)
+    }
 
-    res.status(200).json({
+    // Handle variations
+    if (updateData.hasVariations) {
+      if (variationTypes) {
+        try {
+          updateData.variationTypes = typeof variationTypes === "string" ? JSON.parse(variationTypes) : variationTypes
+        } catch (e) {
+          console.error("Invalid variationTypes format:", e)
+        }
+      }
+
+      if (variants) {
+        try {
+          const parsedVariants = typeof variants === "string" ? JSON.parse(variants) : variants
+          updateData.variants = parsedVariants.map((variant, index) => {
+            const variantData = {
+              ...variant,
+              price: Number.parseFloat(variant.price),
+              stock: Number.parseInt(variant.stock),
+            }
+
+            if (variant.comparePrice) {
+              variantData.comparePrice = Number.parseFloat(variant.comparePrice)
+            }
+
+            // Handle variant images
+            const variantImageField = `variantImages_${index}`
+            if (req.files && req.files[variantImageField]) {
+              variantData.images = req.files[variantImageField].map((file) => `/uploads/${file.filename}`)
+            }
+
+            return variantData
+          })
+        } catch (e) {
+          console.error("Invalid variants format:", e)
+        }
+      }
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+      runValidators: true,
+    }).populate([
+      { path: "category", select: "name slug" },
+      { path: "brand", select: "name logo" },
+      { path: "createdBy", select: "name email" },
+    ])
+
+    res.json({
       success: true,
-      product,
+      message: "Product updated successfully",
+      product: updatedProduct,
     })
   } catch (error) {
     console.error("Update product error:", error)
+
+    // Clean up uploaded files if error occurs
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        const filePath = path.join(__dirname, "../uploads", file.filename)
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath)
+        }
+      })
+    }
+
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Failed to update product",
       error: error.message,
     })
   }
@@ -525,7 +596,6 @@ exports.updateProduct = async (req, res) => {
 exports.deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
-
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -533,9 +603,33 @@ exports.deleteProduct = async (req, res) => {
       })
     }
 
-    await product.deleteOne()
+    // Delete product images
+    if (product.images && product.images.length > 0) {
+      product.images.forEach((imagePath) => {
+        const fullPath = path.join(__dirname, "..", imagePath)
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath)
+        }
+      })
+    }
 
-    res.status(200).json({
+    // Delete variant images
+    if (product.variants && product.variants.length > 0) {
+      product.variants.forEach((variant) => {
+        if (variant.images && variant.images.length > 0) {
+          variant.images.forEach((imagePath) => {
+            const fullPath = path.join(__dirname, "..", imagePath)
+            if (fs.existsSync(fullPath)) {
+              fs.unlinkSync(fullPath)
+            }
+          })
+        }
+      })
+    }
+
+    await Product.findByIdAndDelete(req.params.id)
+
+    res.json({
       success: true,
       message: "Product deleted successfully",
     })
@@ -543,7 +637,7 @@ exports.deleteProduct = async (req, res) => {
     console.error("Delete product error:", error)
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Failed to delete product",
       error: error.message,
     })
   }
@@ -1140,6 +1234,178 @@ exports.bulkStockUpdate = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Search products
+// @route   GET /api/products/search
+// @access  Public
+exports.searchProducts = async (req, res) => {
+  try {
+    const { q, page = 1, limit = 12, category, brand, minPrice, maxPrice, sortBy = "relevance" } = req.query
+
+    if (!q) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query is required",
+      })
+    }
+
+    // Build search query
+    const searchQuery = {
+      $or: [
+        { name: { $regex: q, $options: "i" } },
+        { description: { $regex: q, $options: "i" } },
+        { shortDescription: { $regex: q, $options: "i" } },
+        { tags: { $in: [new RegExp(q, "i")] } },
+      ],
+      status: "published",
+    }
+
+    // Add filters
+    if (category) {
+      searchQuery.category = category
+    }
+
+    if (brand) {
+      searchQuery.brand = brand
+    }
+
+    if (minPrice || maxPrice) {
+      searchQuery.price = {}
+      if (minPrice) searchQuery.price.$gte = Number.parseFloat(minPrice)
+      if (maxPrice) searchQuery.price.$lte = Number.parseFloat(maxPrice)
+    }
+
+    // Determine sort order
+    let sortOptions = {}
+    switch (sortBy) {
+      case "price_low":
+        sortOptions = { price: 1 }
+        break
+      case "price_high":
+        sortOptions = { price: -1 }
+        break
+      case "newest":
+        sortOptions = { createdAt: -1 }
+        break
+      case "oldest":
+        sortOptions = { createdAt: 1 }
+        break
+      case "name":
+        sortOptions = { name: 1 }
+        break
+      default:
+        sortOptions = { createdAt: -1 }
+    }
+
+    const options = {
+      page: Number.parseInt(page),
+      limit: Number.parseInt(limit),
+      sort: sortOptions,
+      populate: [
+        {
+          path: "category",
+          select: "name slug",
+        },
+        {
+          path: "brand",
+          select: "name logo",
+        },
+      ],
+    }
+
+    const result = await Product.paginate(searchQuery, options)
+
+    res.json({
+      success: true,
+      query: q,
+      products: result.docs,
+      pagination: {
+        currentPage: result.page,
+        totalPages: result.totalPages,
+        totalItems: result.totalDocs,
+        itemsPerPage: result.limit,
+        hasNextPage: result.hasNextPage,
+        hasPrevPage: result.hasPrevPage,
+      },
+    })
+  } catch (error) {
+    console.error("Search products error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to search products",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Get featured products
+// @route   GET /api/products/featured
+// @access  Public
+exports.getFeaturedProducts = async (req, res) => {
+  try {
+    const { limit = 8 } = req.query
+
+    const products = await Product.find({
+      featured: true,
+      status: "published",
+    })
+      .limit(Number.parseInt(limit))
+      .populate("category", "name slug")
+      .populate("brand", "name logo")
+      .sort({ createdAt: -1 })
+
+    res.json({
+      success: true,
+      products,
+    })
+  } catch (error) {
+    console.error("Get featured products error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch featured products",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Get related products
+// @route   GET /api/products/:id/related
+// @access  Public
+exports.getRelatedProducts = async (req, res) => {
+  try {
+    const { limit = 4 } = req.query
+    const product = await Product.findById(req.params.id)
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      })
+    }
+
+    const relatedProducts = await Product.find({
+      _id: { $ne: product._id },
+      $or: [{ category: product.category }, { brand: product.brand }, { tags: { $in: product.tags || [] } }],
+      status: "published",
+    })
+      .limit(Number.parseInt(limit))
+      .populate("category", "name slug")
+      .populate("brand", "name logo")
+      .sort({ createdAt: -1 })
+
+    res.json({
+      success: true,
+      products: relatedProducts,
+    })
+  } catch (error) {
+    console.error("Get related products error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch related products",
       error: error.message,
     })
   }
