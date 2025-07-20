@@ -390,7 +390,7 @@ exports.updateOrderStatus = async (req, res) => {
       })
     }
 
-    if (!status || !["pending", "processing", "shipped", "delivered", "cancelled"].includes(status)) {
+    if (!status || !["pending", "processing", "shipped", "delivered", "cancelled", "returned"].includes(status)) {
       return res.status(400).json({
         success: false,
         message: "Invalid status value",
@@ -486,7 +486,7 @@ exports.updatePaymentStatus = async (req, res) => {
     }
 
     await order.save()
-
+    console.log(order)
     res.status(200).json({
       success: true,
       order,

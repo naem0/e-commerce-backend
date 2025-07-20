@@ -9,7 +9,7 @@ const {
   deleteReview,
 } = require("../controllers/review.controller")
 const { protect, admin } = require("../middleware/auth.middleware")
-const { upload } = require("../middleware/upload.middleware")
+const upload = require("../middleware/upload.middleware")
 
 // Public routes
 router.get("/product/:productId", getProductReviews)

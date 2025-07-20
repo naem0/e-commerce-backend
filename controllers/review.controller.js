@@ -1,7 +1,7 @@
 const Review = require("../models/Review")
 const Product = require("../models/Product")
 const Order = require("../models/Order")
-const mongoose = require("mongoose") // Declare mongoose variable
+const mongoose = require("mongoose")
 
 // @desc    Get all reviews (Admin)
 // @route   GET /api/reviews
@@ -13,7 +13,7 @@ exports.getReviews = async (req, res) => {
     // Build query
     const query = {}
 
-    if (status) query.status = status
+    if (status  && status !== "all") query.status = status
     if (product) query.product = product
     if (user) query.user = user
 
@@ -83,7 +83,7 @@ exports.getProductReviews = async (req, res) => {
     const ratingStats = await Review.aggregate([
       {
         $match: {
-          product: mongoose.Types.ObjectId(req.params.productId),
+          product: new mongoose.Types.ObjectId(req.params.productId),
           status: "approved",
         },
       },
