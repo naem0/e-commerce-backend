@@ -44,34 +44,6 @@ const variantSchema = new mongoose.Schema({
   },
 })
 
-// Review Schema
-const reviewSchema = new mongoose.Schema(
-  {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      ref: "User",
-    },
-    name: {
-      type: String,
-      required: true,
-    },
-    rating: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 5,
-    },
-    comment: {
-      type: String,
-      required: true,
-    },
-  },
-  {
-    timestamps: true,
-  },
-)
-
 // Product Schema
 const productSchema = new mongoose.Schema(
   {
@@ -120,7 +92,7 @@ const productSchema = new mongoose.Schema(
         type: String,
       },
     ],
-    reviews: [reviewSchema],
+    // Remove reviews array - will get from Review collection
     rating: {
       type: Number,
       default: 0,
@@ -150,6 +122,29 @@ const productSchema = new mongoose.Schema(
       height: { type: Number },
     },
     tags: [{ type: String }],
+    // Flash Sale fields
+    isFlashSale: {
+      type: Boolean,
+      default: false,
+    },
+    flashSalePrice: {
+      type: Number,
+    },
+    flashSaleStartDate: {
+      type: Date,
+    },
+    flashSaleEndDate: {
+      type: Date,
+    },
+    flashSaleStock: {
+      type: Number,
+      default: 0,
+    },
+    // Best Sale field
+    isBestSale: {
+      type: Boolean,
+      default: false,
+    },
     // New fields for variations
     hasVariations: {
       type: Boolean,

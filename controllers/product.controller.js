@@ -1,6 +1,7 @@
 const Product = require("../models/Product")
 const Category = require("../models/Category")
 const Brand = require("../models/Brand")
+const Review = require("../models/Review")
 const upload = require("../middleware/upload.middleware")
 const path = require("path")
 const fs = require("fs")
@@ -31,6 +32,8 @@ exports.getProducts = async (req, res) => {
       sortBy = "createdAt",
       sortOrder = "desc",
       tags,
+      isFlashSale,
+      isBestSale,
     } = req.query
 
     // Build query
@@ -59,6 +62,19 @@ exports.getProducts = async (req, res) => {
 
     if (featured !== undefined) {
       query.featured = featured === "true"
+    }
+
+    if (isFlashSale !== undefined) {
+      query.isFlashSale = isFlashSale === "true"
+      // Only show active flash sales
+      if (isFlashSale === "true") {
+        query.flashSaleStartDate = { $lte: new Date() }
+        query.flashSaleEndDate = { $gte: new Date() }
+      }
+    }
+
+    if (isBestSale !== undefined) {
+      query.isBestSale = isBestSale === "true"
     }
 
     if (minPrice || maxPrice) {
@@ -95,9 +111,28 @@ exports.getProducts = async (req, res) => {
 
     const result = await Product.paginate(query, options)
 
+    // Add current price logic for each product
+    const productsWithCurrentPrice = result.docs.map((product) => {
+      const productObj = product.toObject()
+
+      // Check if flash sale is active
+      const now = new Date()
+      const isFlashSaleActive =
+        productObj.isFlashSale &&
+        productObj.flashSaleStartDate &&
+        productObj.flashSaleEndDate &&
+        now >= productObj.flashSaleStartDate &&
+        now <= productObj.flashSaleEndDate
+
+      productObj.currentPrice = isFlashSaleActive ? productObj.flashSalePrice : productObj.price
+      productObj.isFlashSaleActive = isFlashSaleActive
+
+      return productObj
+    })
+
     res.json({
       success: true,
-      products: result.docs,
+      products: productsWithCurrentPrice,
       pagination: {
         currentPage: result.page,
         totalPages: result.totalPages,
@@ -134,13 +169,36 @@ exports.getProduct = async (req, res) => {
       })
     }
 
+    // Get reviews from Review collection
+    const reviews = await Review.find({
+      product: req.params.id,
+      status: "approved",
+    })
+      .populate("user", "name")
+      .sort({ createdAt: -1 })
+      .limit(10)
+
     // Increment view count
     product.views = (product.views || 0) + 1
     await product.save()
 
+    // Add current price logic
+    const productObj = product.toObject()
+    const now = new Date()
+    const isFlashSaleActive =
+      productObj.isFlashSale &&
+      productObj.flashSaleStartDate &&
+      productObj.flashSaleEndDate &&
+      now >= productObj.flashSaleStartDate &&
+      now <= productObj.flashSaleEndDate
+
+    productObj.currentPrice = isFlashSaleActive ? productObj.flashSalePrice : productObj.price
+    productObj.isFlashSaleActive = isFlashSaleActive
+    productObj.reviews = reviews
+
     res.json({
       success: true,
-      product,
+      product: productObj,
     })
   } catch (error) {
     console.error("Get product error:", error)
@@ -169,13 +227,36 @@ exports.getProductBySlug = async (req, res) => {
       })
     }
 
+    // Get reviews from Review collection
+    const reviews = await Review.find({
+      product: product._id,
+      status: "approved",
+    })
+      .populate("user", "name")
+      .sort({ createdAt: -1 })
+      .limit(10)
+
     // Increment view count
     product.views = (product.views || 0) + 1
     await product.save()
 
+    // Add current price logic
+    const productObj = product.toObject()
+    const now = new Date()
+    const isFlashSaleActive =
+      productObj.isFlashSale &&
+      productObj.flashSaleStartDate &&
+      productObj.flashSaleEndDate &&
+      now >= productObj.flashSaleStartDate &&
+      now <= productObj.flashSaleEndDate
+
+    productObj.currentPrice = isFlashSaleActive ? productObj.flashSalePrice : productObj.price
+    productObj.isFlashSaleActive = isFlashSaleActive
+    productObj.reviews = reviews
+
     res.json({
       success: true,
-      product,
+      product: productObj,
     })
   } catch (error) {
     console.error("Get product by slug error:", error)
@@ -1406,6 +1487,85 @@ exports.getRelatedProducts = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch related products",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Update flash sale status
+// @route   PATCH /api/products/:id/flash-sale
+// @access  Private/Admin
+exports.updateFlashSale = async (req, res) => {
+  try {
+    const { isFlashSale, flashSalePrice, flashSaleStartDate, flashSaleEndDate, flashSaleStock } = req.body
+
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      })
+    }
+
+    // Update flash sale fields
+    product.isFlashSale = isFlashSale
+    if (isFlashSale) {
+      product.flashSalePrice = flashSalePrice
+      product.flashSaleStartDate = flashSaleStartDate
+      product.flashSaleEndDate = flashSaleEndDate
+      product.flashSaleStock = flashSaleStock || product.stock
+    } else {
+      product.flashSalePrice = undefined
+      product.flashSaleStartDate = undefined
+      product.flashSaleEndDate = undefined
+      product.flashSaleStock = 0
+    }
+
+    await product.save()
+
+    res.json({
+      success: true,
+      message: "Flash sale status updated successfully",
+      product,
+    })
+  } catch (error) {
+    console.error("Update flash sale error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to update flash sale status",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Update best sale status
+// @route   PATCH /api/products/:id/best-sale
+// @access  Private/Admin
+exports.updateBestSale = async (req, res) => {
+  try {
+    const { isBestSale } = req.body
+
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      })
+    }
+
+    product.isBestSale = isBestSale
+    await product.save()
+
+    res.json({
+      success: true,
+      message: "Best sale status updated successfully",
+      product,
+    })
+  } catch (error) {
+    console.error("Update best sale error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to update best sale status",
       error: error.message,
     })
   }

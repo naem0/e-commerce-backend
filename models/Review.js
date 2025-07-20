@@ -4,18 +4,18 @@ const reviewSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
       required: true,
+      ref: "User",
     },
     product: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
       required: true,
+      ref: "Product",
     },
     order: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
       required: true,
+      ref: "Order",
     },
     rating: {
       type: Number,
@@ -26,18 +26,26 @@ const reviewSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
-      maxlength: 100,
+      trim: true,
     },
     comment: {
       type: String,
       required: true,
-      maxlength: 1000,
+      trim: true,
     },
-    images: [String], // Array of image paths
+    images: [
+      {
+        type: String,
+      },
+    ],
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: "pending",
+    },
+    adminResponse: {
+      type: String,
+      trim: true,
     },
     helpful: {
       type: Number,
@@ -45,15 +53,7 @@ const reviewSchema = new mongoose.Schema(
     },
     verified: {
       type: Boolean,
-      default: false, // True if user actually purchased the product
-    },
-    adminResponse: {
-      message: String,
-      respondedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-      respondedAt: Date,
+      default: false,
     },
   },
   {
@@ -61,8 +61,10 @@ const reviewSchema = new mongoose.Schema(
   },
 )
 
-// Ensure one review per user per product per order
-reviewSchema.index({ user: 1, product: 1, order: 1 }, { unique: true })
+// Index for better performance
+reviewSchema.index({ product: 1, status: 1 })
+reviewSchema.index({ user: 1 })
+reviewSchema.index({ order: 1 })
 
 const Review = mongoose.model("Review", reviewSchema)
 
