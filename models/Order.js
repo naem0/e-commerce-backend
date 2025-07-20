@@ -35,12 +35,13 @@ const orderSchema = new mongoose.Schema(
     },
     shippingAddress: {
       name: String,
+      email: String,
+      phone: String,
       street: String,
       city: String,
       state: String,
       zipCode: String,
       country: String,
-      phone: String,
     },
     paymentMethod: {
       type: String,
@@ -57,7 +58,7 @@ const orderSchema = new mongoose.Schema(
       method: String,
       phoneNumber: String,
     },
-    // Partial Payment System
+    // Enhanced Partial Payment System
     payments: [
       {
         amount: {
@@ -69,17 +70,27 @@ const orderSchema = new mongoose.Schema(
           required: true,
         },
         transactionId: String,
-        phoneNumber: String,
+        accountNumber: String,
+        screenshot: String, // File path for payment screenshot
         date: {
           type: Date,
           default: Date.now,
         },
         status: {
           type: String,
-          enum: ["pending", "confirmed", "failed"],
+          enum: ["pending", "confirmed", "rejected"],
           default: "pending",
         },
         notes: String,
+        paidBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        confirmedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        confirmedAt: Date,
       },
     ],
     subtotal: {
@@ -106,12 +117,9 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    dueAmount: {
-      type: Number,
-      default: 0,
-    },
     notes: String,
-    trackingNumber: String,
+    trackingInfo: String,
+    adminNotes: String,
     estimatedDelivery: Date,
     deliveredAt: Date,
     cancelledAt: Date,
@@ -129,21 +137,29 @@ orderSchema.pre("save", async function (next) {
     this.orderNumber = `ORD-${Date.now()}-${(count + 1).toString().padStart(4, "0")}`
   }
 
-  // Calculate due amount
-  this.dueAmount = this.total - this.paidAmount
+  // Calculate paid amount from confirmed payments
+  const confirmedPayments = this.payments.filter((payment) => payment.status === "confirmed")
+  this.paidAmount = confirmedPayments.reduce((total, payment) => total + payment.amount, 0)
 
   // Update payment status based on paid amount
   if (this.paidAmount === 0) {
     this.paymentStatus = "pending"
   } else if (this.paidAmount >= this.total) {
     this.paymentStatus = "paid"
-    this.dueAmount = 0
   } else {
     this.paymentStatus = "partial"
   }
 
   next()
 })
+
+// Virtual for due amount
+orderSchema.virtual("dueAmount").get(function () {
+  return this.total - this.paidAmount
+})
+
+// Ensure virtual fields are serialized
+orderSchema.set("toJSON", { virtuals: true })
 
 const Order = mongoose.model("Order", orderSchema)
 

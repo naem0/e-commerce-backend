@@ -1,5 +1,7 @@
 const Order = require("../models/Order")
 const Product = require("../models/Product")
+const User = require("../models/User")
+const mongoose = require("mongoose")
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -104,6 +106,14 @@ exports.getMyOrders = async (req, res) => {
 // @access  Private
 exports.getOrder = async (req, res) => {
   try {
+    // Validate ObjectId
+    if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
+
     const order = await Order.findById(req.params.id)
       .populate("user", "name email phone")
       .populate("items.product", "name slug images")
@@ -230,6 +240,13 @@ exports.createOrder = async (req, res) => {
 exports.addPartialPayment = async (req, res) => {
   try {
     const { amount, method, transactionId, phoneNumber, notes } = req.body
+    // Validate ObjectId
+    if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
 
     if (!amount || amount <= 0) {
       return res.status(400).json({
@@ -285,12 +302,93 @@ exports.addPartialPayment = async (req, res) => {
   }
 }
 
+// @desc    Confirm payment (Admin only)
+// @route   PATCH /api/orders/:orderId/payments/:paymentId/confirm
+// @access  Private/Admin
+exports.confirmPayment = async (req, res) => {
+  try {
+    const { orderId, paymentId } = req.params
+    const { status, adminNote } = req.body
+
+    // Validate ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(paymentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment ID",
+      })
+    }
+
+    const order = await Order.findById(orderId)
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    const payment = order.payments.id(paymentId)
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      })
+    }
+
+    payment.status = status
+    payment.adminNote = adminNote
+    payment.confirmedAt = new Date()
+    payment.confirmedBy = req.user.id
+
+    // Recalculate payment status
+    const confirmedPayments = order.payments.filter((p) => p.status === "confirmed")
+    const totalPaid = confirmedPayments.reduce((sum, p) => sum + p.amount, 0)
+
+    if (totalPaid >= order.total) {
+      order.paymentStatus = "paid"
+    } else if (totalPaid > 0) {
+      order.paymentStatus = "partial"
+    } else {
+      order.paymentStatus = "pending"
+    }
+
+    await order.save()
+
+    res.status(200).json({
+      success: true,
+      message: `Payment ${status} successfully`,
+      order,
+    })
+  } catch (error) {
+    console.error("Confirm payment error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
 // @desc    Update order status
 // @route   PATCH /api/orders/:id/status
 // @access  Private/Admin
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body
+
+    // Validate ObjectId
+    if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
 
     if (!status || !["pending", "processing", "shipped", "delivered", "cancelled"].includes(status)) {
       return res.status(400).json({
@@ -350,6 +448,14 @@ exports.updateOrderStatus = async (req, res) => {
 exports.updatePaymentStatus = async (req, res) => {
   try {
     const { paymentStatus, transactionId } = req.body
+
+    // Validate ObjectId
+    if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
 
     if (!paymentStatus || !["pending", "partial", "paid", "failed"].includes(paymentStatus)) {
       return res.status(400).json({
