@@ -1,11 +1,23 @@
 const express = require("express")
 const router = express.Router()
-const { register, login, getMe } = require("../controllers/auth.controller")
+const {
+  register,
+  login,
+  getMe,
+  forgotPassword,
+  resetPassword,
+  verifyResetToken,
+} = require("../controllers/auth.controller")
 const { protect } = require("../middleware/auth.middleware")
 
-// Routes
+// Public routes
 router.post("/register", register)
 router.post("/login", login)
+router.post("/forgot-password", forgotPassword)
+router.post("/reset-password/:token", resetPassword)
+router.get("/verify-reset-token/:token", verifyResetToken)
+
+// Protected routes
 router.get("/me", protect, getMe)
 
 module.exports = router
