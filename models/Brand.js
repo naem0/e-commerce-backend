@@ -54,7 +54,6 @@ brandSchema.plugin(mongoosePaginate)
 
 // Create index for search
 brandSchema.index({ name: "text", description: "text" })
-brandSchema.index({ slug: 1 })
 brandSchema.index({ status: 1 })
 
 const Brand = mongoose.model("Brand", brandSchema)

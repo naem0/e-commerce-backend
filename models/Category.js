@@ -58,7 +58,6 @@ categorySchema.plugin(mongoosePaginate)
 
 // Create index for search
 categorySchema.index({ name: "text", description: "text" })
-categorySchema.index({ slug: 1 })
 categorySchema.index({ status: 1 })
 
 // Virtual for getting subcategories
