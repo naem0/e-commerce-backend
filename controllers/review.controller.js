@@ -246,6 +246,25 @@ exports.updateReviewStatus = async (req, res) => {
     review.status = status
     await review.save()
 
+    // if review.status === approved, than we add product rating
+    if (status === "approved") {
+      const product = await Product.findById(review.product)
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        })
+      }
+      // Update product rating
+      const totalReviews = await Review.countDocuments({ product: review.product, status: "approved" })
+      const averageRating = await Review.aggregate([
+        { $match: { product: review.product, status: "approved" } },
+        { $group: { _id: null, averageRating: { $avg: "$rating" } } },
+      ])
+      product.rating = averageRating.length > 0 ? averageRating[0].averageRating : 0
+      product.numReviews = totalReviews
+      await product.save()
+    }
     res.status(200).json({
       success: true,
       review,
