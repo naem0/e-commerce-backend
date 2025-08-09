@@ -38,7 +38,7 @@ exports.getCategories = async (req, res) => {
       query.status = status
     }
 
-    if (parent !== undefined) {
+    if (parent !== undefined && parent !== '') {
       query.parent = parent === "null" ? null : parent
     }
 
@@ -216,7 +216,7 @@ exports.createCategory = async (req, res) => {
     }
 
     // Validate parent category if provided
-    if (parent) {
+    if (parent !== undefined && parent !== '') {
       const parentCategory = await Category.findById(parent)
       if (!parentCategory) {
         return res.status(400).json({
