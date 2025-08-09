@@ -153,6 +153,40 @@ exports.getCategory = async (req, res) => {
   }
 }
 
+// @desc    Get category by slug
+// @route   GET /api/categories/slug/:slug
+// @access  Public
+exports.getCategoryBySlug = async (req, res) => {
+  try {
+    const category = await Category.findOne({ slug: req.params.slug }).populate("parent", "name slug")
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      })
+    }
+
+    // Get subcategories
+    const subcategories = await Category.find({ parent: category._id })
+
+    res.json({
+      success: true,
+      category: {
+        ...category.toObject(),
+        subcategories,
+      },
+    })
+  } catch (error) {
+    console.error("Get category error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch category",
+      error: error.message,
+    })
+  }
+}
+
 // @desc    Create a category
 // @route   POST /api/categories
 // @access  Private/Admin
