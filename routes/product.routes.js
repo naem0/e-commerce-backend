@@ -35,14 +35,14 @@ router.get("/:id/related", getRelatedProducts)
 router.post("/:id/reviews", protect, addProductReview)
 
 // Admin routes
-router.post("/", protect, admin, upload.array("images", 10), createProduct)
-router.put("/:id", protect, admin, upload.array("images", 10), updateProduct)
+router.post("/", protect, admin, upload.any(), createProduct)
+router.put("/:id", protect, admin, upload.any(), updateProduct)
 router.delete("/:id", protect, admin, deleteProduct)
 router.patch("/:id/status", protect, admin, updateProductStatus)
 
 // Variant routes
-router.post("/:id/variants", protect, admin, upload.array("images", 10), addProductVariant)
-router.put("/:id/variants/:variantId", protect, admin, upload.array("images", 10), updateProductVariant)
+router.post("/:id/variants", protect, admin, upload.any(), addProductVariant)
+router.put("/:id/variants/:variantId", protect, admin, upload.any(), updateProductVariant)
 router.delete("/:id/variants/:variantId", protect, admin, deleteProductVariant)
 
 // Variation types routes

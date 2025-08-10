@@ -4,7 +4,6 @@ const bannerSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: [true, "Banner title is required"],
       trim: true,
     },
     subtitle: {
@@ -21,19 +20,15 @@ const bannerSchema = new mongoose.Schema(
     },
     buttonText: {
       type: String,
-      default: "Shop Now",
     },
     buttonLink: {
       type: String,
-      default: "/products",
     },
     backgroundColor: {
       type: String,
-      default: "#f8fafc",
     },
     textColor: {
       type: String,
-      default: "#1e293b",
     },
     enabled: {
       type: Boolean,

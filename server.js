@@ -16,6 +16,7 @@ const bannerRoutes = require("./routes/banner.routes")
 const analyticsRoutes = require("./routes/analytics.routes")
 const wishlistRoutes = require("./routes/wishlist.routes")
 const reviewRoutes = require("./routes/review.routes")
+const chatbotRoutes = require("./routes/routes.chatbot")
 
 // Load env vars
 dotenv.config()
@@ -55,6 +56,7 @@ app.use("/api/banners", bannerRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/wishlist", wishlistRoutes)
 app.use("/api/reviews", reviewRoutes)
+app.use('/api/chatbot', chatbotRoutes)
 
 
 // Error handling middleware
