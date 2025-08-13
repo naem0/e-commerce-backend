@@ -29,9 +29,10 @@ const supplierSchema = new mongoose.Schema(
       phone: String,
       email: String,
     },
+    taxId: String,
     paymentTerms: {
       type: String,
-      enum: ["cash", "net_15", "net_30", "net_60"],
+      enum: ["net_30", "net_60", "net_90", "cash_on_delivery", "advance_payment"],
       default: "net_30",
     },
     status: {
@@ -40,11 +41,23 @@ const supplierSchema = new mongoose.Schema(
       default: "active",
     },
     notes: String,
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
   },
   {
     timestamps: true,
   },
 )
+
+// Create index for search
+supplierSchema.index({
+  name: "text",
+  email: "text",
+  phone: "text",
+})
 
 const Supplier = mongoose.model("Supplier", supplierSchema)
 
