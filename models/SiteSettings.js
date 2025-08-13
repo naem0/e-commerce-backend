@@ -43,7 +43,7 @@ const siteSettingsSchema = new mongoose.Schema(
     },
     secondaryColor: {
       type: String,
-      default: "#10b981",
+      default: "#3b82f6",
     },
     // Home page sections configuration
     homePageSections: {
