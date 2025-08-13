@@ -377,9 +377,21 @@ exports.createProduct = async (req, res) => {
 
     if (shipping) {
       try {
-        productData.shipping = typeof shipping === "string" ? JSON.parse(shipping) : shipping
+        console.log("Received shipping:", shipping);
+        let parsedShipping = shipping;
+        if (typeof shipping === "string") {
+          parsedShipping = JSON.parse(shipping);
+        }
+
+        if (parsedShipping.dimensions) {
+          console.log("Received shipping.dimensions:", parsedShipping.dimensions);
+          if (typeof parsedShipping.dimensions === 'string') {
+            parsedShipping.dimensions = JSON.parse(parsedShipping.dimensions);
+          }
+        }
+        productData.shipping = parsedShipping;
       } catch (e) {
-        console.error("Invalid shipping format:", e)
+        console.error("Invalid shipping format:", e);
       }
     }
 
@@ -600,9 +612,19 @@ exports.updateProduct = async (req, res) => {
 
     if (shipping) {
       try {
-        updateData.shipping = typeof shipping === "string" ? JSON.parse(shipping) : shipping
+        let parsedShipping = shipping;
+        if (typeof shipping === "string") {
+          parsedShipping = JSON.parse(shipping);
+        }
+
+        if (parsedShipping.dimensions) {
+          if (typeof parsedShipping.dimensions === 'string') {
+            parsedShipping.dimensions = JSON.parse(parsedShipping.dimensions);
+          }
+        }
+        updateData.shipping = parsedShipping;
       } catch (e) {
-        console.error("Invalid shipping format:", e)
+        console.error("Invalid shipping format (update):", e);
       }
     }
 

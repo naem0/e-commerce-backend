@@ -6,7 +6,6 @@ const axios = require("axios");
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/text-bison-001:generateText";
 const GOOGLE_API_KEY = "AIzaSyBQP2IkK2DkPAUmPrjnmSyChDo6gzYCJZM";
-console.log("Google API Key:", GOOGLE_API_KEY);
 
 async function getGeminiResponse(prompt) {
   try {
@@ -21,7 +20,6 @@ async function getGeminiResponse(prompt) {
       body,
       { headers: { "Content-Type": "application/json" } }
     );
-    console.log("Gemini API Response:", response.data);
 
     return response.data?.candidates?.[0]?.output || "দুঃখিত, উত্তর পাওয়া যায়নি।";
   } catch (error) {
