@@ -19,6 +19,7 @@ const reviewRoutes = require("./routes/review.routes")
 const saleRoutes = require("./routes/sale.routes")
 const purchaseRoutes = require("./routes/purchase.routes")
 const chatbotRoutes = require("./routes/routes.chatbot")
+const supplierRoutes = require("./routes/supplier.routes")
 
 
 // Load env vars
@@ -41,9 +42,7 @@ app.use(express.urlencoded({ extended: true }))
 app.use("/uploads", express.static(path.join(__dirname, "uploads")))
 
 // home route
-app.get("/", (req, res) => {
-  res.send("API is running...")
-})
+app.get("/", (req, res) => { res.send("API is running...") })
 
 // Routes
 app.use("/api/auth", authRoutes)
@@ -62,6 +61,7 @@ app.use("/api/reviews", reviewRoutes)
 app.use('/api/chatbot', chatbotRoutes)
 app.use('/api/sales', saleRoutes)
 app.use('/api/purchases', purchaseRoutes)
+app.use("/api/suppliers", supplierRoutes)
 
 
 // Error handling middleware

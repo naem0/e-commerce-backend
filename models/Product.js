@@ -9,6 +9,11 @@ const createSlug = (name) => {
     .replace(/ +/g, "-")
 }
 
+// Generate barcode
+const generateBarcode = () => {
+  return Date.now().toString() + Math.random().toString(36).substr(2, 5).toUpperCase()
+}
+
 // Variation Option Schema (e.g. "Red", "Blue" for color)
 const variationOptionSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -26,6 +31,7 @@ const variationTypeSchema = new mongoose.Schema({
 // Variant Schema (specific combination like "Red, XL")
 const variantSchema = new mongoose.Schema({
   sku: { type: String, required: true },
+  barcode: { type: String, unique: true, sparse: true },
   price: { type: Number, required: true, min: [0, "Variant price cannot be negative"] },
   comparePrice: { type: Number, min: [0, "Variant compare price cannot be negative"] },
   stock: { type: Number, required: true, min: [0, "Variant stock cannot be negative"], default: 0 },
@@ -99,6 +105,11 @@ const productSchema = new mongoose.Schema(
       },
     ],
     sku: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    barcode: {
       type: String,
       unique: true,
       sparse: true,
@@ -200,11 +211,26 @@ const productSchema = new mongoose.Schema(
   },
 )
 
-// Pre-save middleware to generate slug
+// Pre-save middleware to generate slug and barcode
 productSchema.pre("save", function (next) {
   if (this.isModified("name") || this.isNew) {
     this.slug = createSlug(this.name)
   }
+
+  // Generate barcode if not provided
+  if (!this.barcode && this.isNew) {
+    this.barcode = generateBarcode()
+  }
+
+  // Generate barcodes for variants if not provided
+  if (this.hasVariations && this.variants) {
+    this.variants.forEach((variant) => {
+      if (!variant.barcode) {
+        variant.barcode = generateBarcode()
+      }
+    })
+  }
+
   next()
 })
 
@@ -217,6 +243,8 @@ productSchema.index({
   description: "text",
   shortDescription: "text",
   tags: "text",
+  sku: "text",
+  barcode: "text",
 })
 
 // Add compound indexes for better query performance
@@ -227,6 +255,8 @@ productSchema.index({ price: 1, status: 1 })
 productSchema.index({ createdAt: -1, status: 1 })
 productSchema.index({ isFlashSale: 1, flashSaleStartDate: 1, flashSaleEndDate: 1 })
 productSchema.index({ isBestSale: 1, status: 1 })
+productSchema.index({ barcode: 1 })
+productSchema.index({ sku: 1 })
 
 const Product = mongoose.model("Product", productSchema)
 

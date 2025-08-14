@@ -1,6 +1,7 @@
 const Product = require("../models/Product")
 const Category = require("../models/Category")
 const Brand = require("../models/Brand")
+const mongoose = require("mongoose")
 const Review = require("../models/Review")
 const upload = require("../middleware/upload.middleware")
 const path = require("path")
@@ -21,16 +22,17 @@ exports.getProducts = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 12,
-      search,
+      limit = 10,
       category,
       brand,
-      status,
       featured,
+      status,
+      search,
       minPrice,
       maxPrice,
       sortBy = "createdAt",
       sortOrder = "desc",
+      includeVariants = false,
       tags,
       isFlashSale,
       isBestSale,
@@ -39,29 +41,20 @@ exports.getProducts = async (req, res) => {
     // Build query
     const query = {}
 
+    if (category) query.category = category
+    if (brand) query.brand = brand
+    if (featured !== undefined) query.featured = featured === "true"
+    if (status) query.status = status
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
         { shortDescription: { $regex: search, $options: "i" } },
         { tags: { $in: [new RegExp(search, "i")] } },
+        { sku: { $regex: search, $options: "i" } },
+        { barcode: { $regex: search, $options: "i" } },
       ]
-    }
-
-    if (category) {
-      query.category = category
-    }
-
-    if (brand) {
-      query.brand = brand
-    }
-
-    if (status) {
-      query.status = status
-    }
-
-    if (featured !== undefined) {
-      query.featured = featured === "true"
     }
 
     if (isFlashSale !== undefined) {
@@ -79,8 +72,8 @@ exports.getProducts = async (req, res) => {
 
     if (minPrice || maxPrice) {
       query.price = {}
-      if (minPrice) query.price.$gte = Number.parseFloat(minPrice)
-      if (maxPrice) query.price.$lte = Number.parseFloat(maxPrice)
+      if (minPrice) query.price.$gte = Number(minPrice)
+      if (maxPrice) query.price.$lte = Number(maxPrice)
     }
 
     if (tags) {
@@ -88,11 +81,15 @@ exports.getProducts = async (req, res) => {
       query.tags = { $in: tagArray }
     }
 
-    // Execute query with pagination
+    // Sort options
+    const sortOptions = {}
+    sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1
+
+    // Pagination options
     const options = {
-      page: Number.parseInt(page),
-      limit: Number.parseInt(limit),
-      sort: { [sortBy]: sortOrder === "desc" ? -1 : 1 },
+      page: Number(page),
+      limit: Number(limit),
+      sort: sortOptions,
       populate: [
         {
           path: "category",
@@ -109,10 +106,10 @@ exports.getProducts = async (req, res) => {
       ],
     }
 
-    const result = await Product.paginate(query, options)
+    const products = await Product.paginate(query, options)
 
     // Add current price logic for each product
-    const productsWithCurrentPrice = result.docs.map((product) => {
+    const productsWithCurrentPrice = products.docs.map((product) => {
       const productObj = product.toObject()
 
       // Check if flash sale is active
@@ -130,23 +127,69 @@ exports.getProducts = async (req, res) => {
       return productObj
     })
 
-    res.json({
+    res.status(200).json({
       success: true,
       products: productsWithCurrentPrice,
       pagination: {
-        currentPage: result.page,
-        totalPages: result.totalPages,
-        totalItems: result.totalDocs,
-        itemsPerPage: result.limit,
-        hasNextPage: result.hasNextPage,
-        hasPrevPage: result.hasPrevPage,
+        currentPage: products.page,
+        totalPages: products.totalPages,
+        totalItems: products.totalDocs,
+        itemsPerPage: products.limit,
+        hasNextPage: products.hasNextPage,
+        hasPrevPage: products.hasPrevPage,
       },
     })
   } catch (error) {
     console.error("Get products error:", error)
     res.status(500).json({
       success: false,
-      message: "Failed to fetch products",
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Search products by barcode
+// @route   GET /api/products/barcode/:barcode
+// @access  Public
+exports.getProductByBarcode = async (req, res) => {
+  try {
+    const { barcode } = req.params
+
+    // First check main product barcode
+    let product = await Product.findOne({ barcode }).populate("category", "name slug").populate("brand", "name logo")
+
+    if (product) {
+      return res.status(200).json({
+        success: true,
+        product,
+        variant: null,
+      })
+    }
+
+    // If not found, check variant barcodes
+    product = await Product.findOne({ "variants.barcode": barcode })
+      .populate("category", "name slug")
+      .populate("brand", "name logo")
+
+    if (product) {
+      const variant = product.variants.find((v) => v.barcode === barcode)
+      return res.status(200).json({
+        success: true,
+        product,
+        variant,
+      })
+    }
+
+    res.status(404).json({
+      success: false,
+      message: "Product not found with this barcode",
+    })
+  } catch (error) {
+    console.error("Get product by barcode error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
       error: error.message,
     })
   }
@@ -178,8 +221,8 @@ exports.getProduct = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10)
 
-    // Increment view count
-    product.views = (product.views || 0) + 1
+    // Increment views
+    product.views += 1
     await product.save()
 
     // Add current price logic
@@ -196,7 +239,7 @@ exports.getProduct = async (req, res) => {
     productObj.isFlashSaleActive = isFlashSaleActive
     productObj.reviews = reviews
 
-    res.json({
+    res.status(200).json({
       success: true,
       product: productObj,
     })
@@ -204,7 +247,7 @@ exports.getProduct = async (req, res) => {
     console.error("Get product error:", error)
     res.status(500).json({
       success: false,
-      message: "Failed to fetch product",
+      message: "Server error",
       error: error.message,
     })
   }
@@ -236,8 +279,8 @@ exports.getProductBySlug = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10)
 
-    // Increment view count
-    product.views = (product.views || 0) + 1
+    // Increment views
+    product.views += 1
     await product.save()
 
     // Add current price logic
@@ -254,7 +297,7 @@ exports.getProductBySlug = async (req, res) => {
     productObj.isFlashSaleActive = isFlashSaleActive
     productObj.reviews = reviews
 
-    res.json({
+    res.status(200).json({
       success: true,
       product: productObj,
     })
@@ -262,13 +305,13 @@ exports.getProductBySlug = async (req, res) => {
     console.error("Get product by slug error:", error)
     res.status(500).json({
       success: false,
-      message: "Failed to fetch product",
+      message: "Server error",
       error: error.message,
     })
   }
 }
 
-// @desc    Create a product
+// @desc    Create product
 // @route   POST /api/products
 // @access  Private/Admin
 exports.createProduct = async (req, res) => {
@@ -282,9 +325,10 @@ exports.createProduct = async (req, res) => {
       category,
       brand,
       stock,
+      sku,
+      barcode,
       featured,
       status,
-      sku,
       weight,
       dimensions,
       tags,
@@ -296,168 +340,113 @@ exports.createProduct = async (req, res) => {
       specification,
     } = req.body
 
-    // Check if product already exists
-    const existingProduct = await Product.findOne({ name })
-    if (existingProduct) {
+    // Check if category exists
+    const categoryExists = await Category.findById(category)
+    if (!categoryExists) {
       return res.status(400).json({
         success: false,
-        message: "Product with this name already exists",
+        message: "Category not found",
       })
     }
 
-    // Validate category
-    if (category) {
-      const categoryExists = await Category.findById(category)
-      if (!categoryExists) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid category",
-        })
-      }
-    }
-
-    // Validate brand
+    // Check if brand exists (if provided)
     if (brand) {
       const brandExists = await Brand.findById(brand)
       if (!brandExists) {
         return res.status(400).json({
           success: false,
-          message: "Invalid brand",
+          message: "Brand not found",
         })
       }
     }
 
-    // Create product data
+    // Check if SKU already exists
+    if (sku) {
+      const existingSKU = await Product.findOne({ sku })
+      if (existingSKU) {
+        return res.status(400).json({
+          success: false,
+          message: "SKU already exists",
+        })
+      }
+    }
+
+    // Check if barcode already exists
+    if (barcode) {
+      const existingBarcode = await Product.findOne({ barcode })
+      if (existingBarcode) {
+        return res.status(400).json({
+          success: false,
+          message: "Barcode already exists",
+        })
+      }
+    }
+
+    // Handle file uploads
+    const images = []
+    if (req.files && req.files.images) {
+      const imageFiles = Array.isArray(req.files.images) ? req.files.images : [req.files.images]
+      imageFiles.forEach((file) => {
+        images.push(`/uploads/products/${file.filename}`)
+      })
+    }
+
+    // Process variants if hasVariations is true
+    let processedVariants = []
+    if (hasVariations && variants) {
+      const variantsData = typeof variants === "string" ? JSON.parse(variants) : variants
+
+      processedVariants = variantsData.map((variant, index) => {
+        const variantImages = []
+
+        // Handle variant images
+        if (req.files) {
+          const variantImageKey = `variantImages_${index}`
+          if (req.files[variantImageKey]) {
+            const variantImageFiles = Array.isArray(req.files[variantImageKey])
+              ? req.files[variantImageKey]
+              : [req.files[variantImageKey]]
+
+            variantImageFiles.forEach((file) => {
+              variantImages.push(`/uploads/products/${file.filename}`)
+            })
+          }
+        }
+
+        return {
+          ...variant,
+          images: variantImages,
+        }
+      })
+    }
+
     const productData = {
       name,
       description,
       shortDescription,
-      price: Number.parseFloat(price),
+      price: Number(price),
+      comparePrice: comparePrice ? Number(comparePrice) : undefined,
       category,
-      brand,
-      stock: Number.parseInt(stock),
-      featured: featured === "true" || featured === true,
-      status: status || "draft",
+      brand: brand || undefined,
+      stock: Number(stock),
+      images,
       sku,
-      weight: weight ? Number.parseFloat(weight) : undefined,
+      barcode,
+      featured: featured === "true",
+      status: status || "draft",
+      weight: weight ? Number(weight) : undefined,
+      dimensions: dimensions ? JSON.parse(dimensions) : undefined,
+      tags: tags ? JSON.parse(tags) : [],
+      seo: seo ? JSON.parse(seo) : undefined,
+      shipping: shipping ? JSON.parse(shipping) : undefined,
+      hasVariations: hasVariations === "true",
+      variationTypes: variationTypes ? JSON.parse(variationTypes) : [],
+      variants: processedVariants,
       createdBy: req.user.id,
-      hasVariations: hasVariations === "true" || hasVariations === true,
       specification,
     }
 
-    // Add optional fields
-    if (comparePrice) {
-      productData.comparePrice = Number.parseFloat(comparePrice)
-    }
-
-    if (dimensions) {
-      try {
-        productData.dimensions = typeof dimensions === "string" ? JSON.parse(dimensions) : dimensions
-      } catch (e) {
-        console.error("Invalid dimensions format:", e)
-      }
-    }
-
-    if (tags) {
-      try {
-        productData.tags = typeof tags === "string" ? JSON.parse(tags) : tags
-      } catch (e) {
-        // If JSON parse fails, try splitting by comma
-        productData.tags = typeof tags === "string" ? tags.split(",").map((tag) => tag.trim()) : tags
-      }
-    }
-
-    if (seo) {
-      try {
-        productData.seo = typeof seo === "string" ? JSON.parse(seo) : seo
-      } catch (e) {
-        console.error("Invalid SEO format:", e)
-      }
-    }
-
-    if (shipping) {
-      try {
-        console.log("Received shipping:", shipping);
-        let parsedShipping = shipping;
-        if (typeof shipping === "string") {
-          parsedShipping = JSON.parse(shipping);
-        }
-
-        if (parsedShipping.dimensions) {
-          console.log("Received shipping.dimensions:", parsedShipping.dimensions);
-          if (typeof parsedShipping.dimensions === 'string') {
-            parsedShipping.dimensions = JSON.parse(parsedShipping.dimensions);
-          }
-        }
-        productData.shipping = parsedShipping;
-      } catch (e) {
-        console.error("Invalid shipping format:", e);
-      }
-    }
-
-    // Initialize image arrays
-    const mainProductImages = [];
-    const variantImagesMap = new Map(); // Map to store variant images by variant index
-
-    // Process all uploaded files
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (file.fieldname === 'images') {
-          mainProductImages.push(`/uploads/${file.filename}`);
-        } else if (file.fieldname.startsWith('variantImages_')) {
-          const variantIndex = parseInt(file.fieldname.split('_')[1]);
-          if (!variantImagesMap.has(variantIndex)) {
-            variantImagesMap.set(variantIndex, []);
-          }
-          variantImagesMap.get(variantIndex).push(`/uploads/${file.filename}`);
-        }
-      });
-    }
-
-    // Assign main product images
-    if (mainProductImages.length > 0) {
-      productData.images = mainProductImages;
-    }
-
-    // Handle variations
-    if (productData.hasVariations) {
-      if (variationTypes) {
-        try {
-          productData.variationTypes = typeof variationTypes === "string" ? JSON.parse(variationTypes) : variationTypes
-        } catch (e) {
-          console.error("Invalid variationTypes format:", e)
-        }
-      }
-
-      if (variants) {
-        try {
-          const parsedVariants = typeof variants === "string" ? JSON.parse(variants) : variants
-          productData.variants = parsedVariants.map((variant, index) => {
-            const variantData = {
-              ...variant,
-              price: Number.parseFloat(variant.price),
-              stock: Number.parseInt(variant.stock),
-            }
-
-            if (variant.comparePrice) {
-              variantData.comparePrice = Number.parseFloat(variant.comparePrice)
-            }
-
-            // Assign variant images from the map
-            if (variantImagesMap.has(index)) {
-              variantData.images = variantImagesMap.get(index);
-            }
-
-            return variantData
-          })
-        } catch (e) {
-          console.error("Invalid variants format:", e)
-        }
-      }
-    }
-
-    const product = new Product(productData)
-    await product.save()
+    const product = await Product.create(productData)
 
     // Populate the created product
     await product.populate([
@@ -486,17 +475,26 @@ exports.createProduct = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to create product",
+      message: "Server error",
       error: error.message,
     })
   }
 }
 
-// @desc    Update a product
+// @desc    Update product
 // @route   PUT /api/products/:id
 // @access  Private/Admin
 exports.updateProduct = async (req, res) => {
   try {
+    const product = await Product.findById(req.params.id)
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      })
+    }
+
     const {
       name,
       description,
@@ -506,9 +504,10 @@ exports.updateProduct = async (req, res) => {
       category,
       brand,
       stock,
+      sku,
+      barcode,
       featured,
       status,
-      sku,
       weight,
       dimensions,
       tags,
@@ -520,191 +519,113 @@ exports.updateProduct = async (req, res) => {
       specification,
     } = req.body
 
-    const product = await Product.findById(req.params.id)
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      })
-    }
-
-    // Check if name is being changed and if it already exists
-    if (name && name !== product.name) {
-      const existingProduct = await Product.findOne({ name, _id: { $ne: req.params.id } })
-      if (existingProduct) {
-        return res.status(400).json({
-          success: false,
-          message: "Product with this name already exists",
-        })
-      }
-    }
-
-    // Validate category
-    if (category && category !== product.category?.toString()) {
+    // Check if category exists
+    if (category) {
       const categoryExists = await Category.findById(category)
       if (!categoryExists) {
         return res.status(400).json({
           success: false,
-          message: "Invalid category",
+          message: "Category not found",
         })
       }
     }
 
-    // Validate brand
-    if (brand && brand !== product.brand?.toString()) {
+    // Check if brand exists (if provided)
+    if (brand) {
       const brandExists = await Brand.findById(brand)
       if (!brandExists) {
         return res.status(400).json({
           success: false,
-          message: "Invalid brand",
+          message: "Brand not found",
         })
       }
     }
 
-    // Update product data
+    // Check if SKU already exists (excluding current product)
+    if (sku && sku !== product.sku) {
+      const existingSKU = await Product.findOne({ sku, _id: { $ne: req.params.id } })
+      if (existingSKU) {
+        return res.status(400).json({
+          success: false,
+          message: "SKU already exists",
+        })
+      }
+    }
+
+    // Check if barcode already exists (excluding current product)
+    if (barcode && barcode !== product.barcode) {
+      const existingBarcode = await Product.findOne({ barcode, _id: { $ne: req.params.id } })
+      if (existingBarcode) {
+        return res.status(400).json({
+          success: false,
+          message: "Barcode already exists",
+        })
+      }
+    }
+
+    // Handle file uploads
+    let images = product.images
+    if (req.files && req.files.images) {
+      const imageFiles = Array.isArray(req.files.images) ? req.files.images : [req.files.images]
+      images = []
+      imageFiles.forEach((file) => {
+        images.push(`/uploads/products/${file.filename}`)
+      })
+    }
+
+    // Process variants if hasVariations is true
+    let processedVariants = product.variants
+    if (hasVariations === "true" && variants) {
+      const variantsData = typeof variants === "string" ? JSON.parse(variants) : variants
+
+      processedVariants = variantsData.map((variant, index) => {
+        let variantImages = variant.images || []
+
+        // Handle variant images
+        if (req.files) {
+          const variantImageKey = `variantImages_${index}`
+          if (req.files[variantImageKey]) {
+            const variantImageFiles = Array.isArray(req.files[variantImageKey])
+              ? req.files[variantImageKey]
+              : [req.files[variantImageKey]]
+
+            variantImages = []
+            variantImageFiles.forEach((file) => {
+              variantImages.push(`/uploads/products/${file.filename}`)
+            })
+          }
+        }
+
+        return {
+          ...variant,
+          images: variantImages,
+        }
+      })
+    }
+
     const updateData = {
       name: name || product.name,
       description: description || product.description,
       shortDescription: shortDescription || product.shortDescription,
-      price: price ? Number.parseFloat(price) : product.price,
+      price: price ? Number(price) : product.price,
+      comparePrice: comparePrice ? Number(comparePrice) : product.comparePrice,
       category: category || product.category,
       brand: brand || product.brand,
-      stock: stock ? Number.parseInt(stock) : product.stock,
-      featured: featured !== undefined ? featured === "true" || featured === true : product.featured,
-      status: status || product.status,
+      stock: stock ? Number(stock) : product.stock,
+      images,
       sku: sku || product.sku,
-      weight: weight ? Number.parseFloat(weight) : product.weight,
-      updatedAt: new Date(),
-      hasVariations:
-        hasVariations !== undefined ? hasVariations === "true" || hasVariations === true : product.hasVariations,
+      barcode: barcode || product.barcode,
+      featured: featured !== undefined ? featured === "true" : product.featured,
+      status: status || product.status,
+      weight: weight ? Number(weight) : product.weight,
+      dimensions: dimensions ? JSON.parse(dimensions) : product.dimensions,
+      tags: tags ? JSON.parse(tags) : product.tags,
+      seo: seo ? JSON.parse(seo) : product.seo,
+      shipping: shipping ? JSON.parse(shipping) : product.shipping,
+      hasVariations: hasVariations !== undefined ? hasVariations === "true" : product.hasVariations,
+      variationTypes: variationTypes ? JSON.parse(variationTypes) : product.variationTypes,
+      variants: processedVariants,
       specification: specification !== undefined ? specification : product.specification,
-    }
-
-    // Add optional fields
-    if (comparePrice !== undefined) {
-      updateData.comparePrice = comparePrice ? Number.parseFloat(comparePrice) : null
-    }
-
-    if (dimensions) {
-      try {
-        updateData.dimensions = typeof dimensions === "string" ? JSON.parse(dimensions) : dimensions
-      } catch (e) {
-        console.error("Invalid dimensions format:", e)
-      }
-    }
-
-    if (tags) {
-      try {
-        updateData.tags = typeof tags === "string" ? JSON.parse(tags) : tags
-      } catch (e) {
-        // If JSON parse fails, try splitting by comma
-        updateData.tags = typeof tags === "string" ? tags.split(",").map((tag) => tag.trim()) : tags
-      }
-    }
-
-    if (seo) {
-      try {
-        updateData.seo = typeof seo === "string" ? JSON.parse(seo) : seo
-      } catch (e) {
-        console.error("Invalid SEO format:", e)
-      }
-    }
-
-    if (shipping) {
-      try {
-        let parsedShipping = shipping;
-        if (typeof shipping === "string") {
-          parsedShipping = JSON.parse(shipping);
-        }
-
-        if (parsedShipping.dimensions) {
-          if (typeof parsedShipping.dimensions === 'string') {
-            parsedShipping.dimensions = JSON.parse(parsedShipping.dimensions);
-          }
-        }
-        updateData.shipping = parsedShipping;
-      } catch (e) {
-        console.error("Invalid shipping format (update):", e);
-      }
-    }
-
-        // Initialize image arrays
-    const mainProductImages = [];
-    const variantImagesMap = new Map(); // Map to store variant images by variant index
-
-    // Process all uploaded files
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (file.fieldname === 'images') {
-          mainProductImages.push(`/uploads/${file.filename}`);
-        } else if (file.fieldname.startsWith('variantImages_')) {
-          const variantIndex = parseInt(file.fieldname.split('_')[1]);
-          if (!variantImagesMap.has(variantIndex)) {
-            variantImagesMap.set(variantIndex, []);
-          }
-          variantImagesMap.get(variantIndex).push(`/uploads/${file.filename}`);
-        }
-      });
-    }
-
-    // Handle main product images
-    if (mainProductImages.length > 0) {
-      // Delete old images
-      if (product.images && product.images.length > 0) {
-        product.images.forEach((imagePath) => {
-          const fullPath = path.join(__dirname, "..", imagePath)
-          if (fs.existsSync(fullPath)) {
-            fs.unlinkSync(fullPath)
-          }
-        })
-      }
-      updateData.images = mainProductImages;
-    }
-
-    // Handle variations
-    if (updateData.hasVariations) {
-      if (variationTypes) {
-        try {
-          updateData.variationTypes = typeof variationTypes === "string" ? JSON.parse(variationTypes) : variationTypes
-        } catch (e) {
-          console.error("Invalid variationTypes format:", e)
-        }
-      }
-
-      if (variants) {
-        try {
-          const parsedVariants = typeof variants === "string" ? JSON.parse(variants) : variants
-          updateData.variants = parsedVariants.map((variant, index) => {
-            const variantData = {
-              ...variant,
-              price: Number.parseFloat(variant.price),
-              stock: Number.parseInt(variant.stock),
-            }
-
-            if (variant.comparePrice) {
-              variantData.comparePrice = Number.parseFloat(variant.comparePrice)
-            }
-
-            // Assign variant images from the map
-            if (variantImagesMap.has(index)) {
-              // Delete old variant images if new ones are uploaded
-              if (variant.images && variant.images.length > 0) {
-                variant.images.forEach((imagePath) => {
-                  const fullPath = path.join(__dirname, "..", imagePath)
-                  if (fs.existsSync(fullPath)) {
-                    fs.unlinkSync(fullPath)
-                  }
-                })
-              }
-              variantData.images = variantImagesMap.get(index);
-            }
-
-            return variantData
-          })
-        } catch (e) {
-          console.error("Invalid variants format:", e)
-        }
-      }
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(req.params.id, updateData, {
@@ -716,7 +637,7 @@ exports.updateProduct = async (req, res) => {
       { path: "createdBy", select: "name email" },
     ])
 
-    res.json({
+    res.status(200).json({
       success: true,
       message: "Product updated successfully",
       product: updatedProduct,
@@ -736,18 +657,19 @@ exports.updateProduct = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to update product",
+      message: "Server error",
       error: error.message,
     })
   }
 }
 
-// @desc    Delete a product
+// @desc    Delete product
 // @route   DELETE /api/products/:id
 // @access  Private/Admin
 exports.deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
+
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -757,10 +679,10 @@ exports.deleteProduct = async (req, res) => {
 
     // Delete product images
     if (product.images && product.images.length > 0) {
-      product.images.forEach((imagePath) => {
-        const fullPath = path.join(__dirname, "..", imagePath)
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath)
+      product.images.forEach((image) => {
+        const imagePath = path.join(__dirname, "..", "uploads", "products", path.basename(image))
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath)
         }
       })
     }
@@ -769,10 +691,10 @@ exports.deleteProduct = async (req, res) => {
     if (product.variants && product.variants.length > 0) {
       product.variants.forEach((variant) => {
         if (variant.images && variant.images.length > 0) {
-          variant.images.forEach((imagePath) => {
-            const fullPath = path.join(__dirname, "..", imagePath)
-            if (fs.existsSync(fullPath)) {
-              fs.unlinkSync(fullPath)
+          variant.images.forEach((image) => {
+            const imagePath = path.join(__dirname, "..", "uploads", "products", path.basename(image))
+            if (fs.existsSync(imagePath)) {
+              fs.unlinkSync(imagePath)
             }
           })
         }
@@ -781,7 +703,7 @@ exports.deleteProduct = async (req, res) => {
 
     await Product.findByIdAndDelete(req.params.id)
 
-    res.json({
+    res.status(200).json({
       success: true,
       message: "Product deleted successfully",
     })
@@ -789,7 +711,7 @@ exports.deleteProduct = async (req, res) => {
     console.error("Delete product error:", error)
     res.status(500).json({
       success: false,
-      message: "Failed to delete product",
+      message: "Server error",
       error: error.message,
     })
   }
@@ -999,8 +921,10 @@ exports.addProductVariant = async (req, res) => {
     if (req.files && req.files.length > 0) {
       // Assuming variant images are sent under a field like 'variantImages_0'
       // or simply 'images' if it's a direct variant image upload
-      const variantImageFiles = req.files.filter(file => file.fieldname.startsWith('variantImages_') || file.fieldname === 'images');
-      variantImages = variantImageFiles.map((file) => `/uploads/${file.filename}`);
+      const variantImageFiles = req.files.filter(
+        (file) => file.fieldname.startsWith("variantImages_") || file.fieldname === "images",
+      )
+      variantImages = variantImageFiles.map((file) => `/uploads/${file.filename}`)
     } else if (images) {
       if (typeof images === "string") {
         variantImages = [images]
@@ -1130,7 +1054,9 @@ exports.updateProductVariant = async (req, res) => {
     if (req.files && req.files.length > 0) {
       // Assuming variant images are sent under a field like 'variantImages_X'
       // or simply 'images' if it's a direct variant image upload
-      const newVariantImageFiles = req.files.filter(file => file.fieldname.startsWith('variantImages_') || file.fieldname === 'images');
+      const newVariantImageFiles = req.files.filter(
+        (file) => file.fieldname.startsWith("variantImages_") || file.fieldname === "images",
+      )
 
       if (newVariantImageFiles.length > 0) {
         // Delete old images if new ones are uploaded
@@ -1142,7 +1068,7 @@ exports.updateProductVariant = async (req, res) => {
             }
           })
         }
-        variantImages = newVariantImageFiles.map((file) => `/uploads/${file.filename}`);
+        variantImages = newVariantImageFiles.map((file) => `/uploads/${file.filename}`)
       }
     } else if (images) {
       if (typeof images === "string") {
@@ -1414,7 +1340,7 @@ exports.bulkStockUpdate = async (req, res) => {
 // @access  Public
 exports.searchProducts = async (req, res) => {
   try {
-    const { q, page = 1, limit = 12, category, brand, minPrice, maxPrice, sortBy = "relevance" } = req.query
+    const { q, page = 1, limit = 10, category, brand, minPrice, maxPrice } = req.query
 
     if (!q) {
       return res.status(400).json({
@@ -1425,88 +1351,60 @@ exports.searchProducts = async (req, res) => {
 
     // Build search query
     const searchQuery = {
-      $or: [
-        { name: { $regex: q, $options: "i" } },
-        { description: { $regex: q, $options: "i" } },
-        { shortDescription: { $regex: q, $options: "i" } },
-        { tags: { $in: [new RegExp(q, "i")] } },
+      $and: [
+        {
+          $or: [
+            { name: { $regex: q, $options: "i" } },
+            { description: { $regex: q, $options: "i" } },
+            { shortDescription: { $regex: q, $options: "i" } },
+            { tags: { $in: [new RegExp(q, "i")] } },
+            { sku: { $regex: q, $options: "i" } },
+            { barcode: { $regex: q, $options: "i" } },
+          ],
+        },
+        { status: "published" },
       ],
-      status: "published",
     }
 
     // Add filters
-    if (category) {
-      searchQuery.category = category
-    }
-
-    if (brand) {
-      searchQuery.brand = brand
-    }
-
+    if (category) searchQuery.$and.push({ category })
+    if (brand) searchQuery.$and.push({ brand })
     if (minPrice || maxPrice) {
-      searchQuery.price = {}
-      if (minPrice) searchQuery.price.$gte = Number.parseFloat(minPrice)
-      if (maxPrice) searchQuery.price.$lte = Number.parseFloat(maxPrice)
-    }
-
-    // Determine sort order
-    let sortOptions = {}
-    switch (sortBy) {
-      case "price_low":
-        sortOptions = { price: 1 }
-        break
-      case "price_high":
-        sortOptions = { price: -1 }
-        break
-      case "newest":
-        sortOptions = { createdAt: -1 }
-        break
-      case "oldest":
-        sortOptions = { createdAt: 1 }
-        break
-      case "name":
-        sortOptions = { name: 1 }
-        break
-      default:
-        sortOptions = { createdAt: -1 }
+      const priceFilter = {}
+      if (minPrice) priceFilter.$gte = Number(minPrice)
+      if (maxPrice) priceFilter.$lte = Number(maxPrice)
+      searchQuery.$and.push({ price: priceFilter })
     }
 
     const options = {
-      page: Number.parseInt(page),
-      limit: Number.parseInt(limit),
-      sort: sortOptions,
+      page: Number(page),
+      limit: Number(limit),
+      sort: { createdAt: -1 },
       populate: [
-        {
-          path: "category",
-          select: "name slug",
-        },
-        {
-          path: "brand",
-          select: "name logo",
-        },
+        { path: "category", select: "name slug" },
+        { path: "brand", select: "name logo" },
       ],
     }
 
-    const result = await Product.paginate(searchQuery, options)
+    const products = await Product.paginate(searchQuery, options)
 
-    res.json({
+    res.status(200).json({
       success: true,
-      query: q,
-      products: result.docs,
+      products: products.docs,
       pagination: {
-        currentPage: result.page,
-        totalPages: result.totalPages,
-        totalItems: result.totalDocs,
-        itemsPerPage: result.limit,
-        hasNextPage: result.hasNextPage,
-        hasPrevPage: result.hasPrevPage,
+        currentPage: products.page,
+        totalPages: products.totalPages,
+        totalItems: products.totalDocs,
+        itemsPerPage: products.limit,
+        hasNextPage: products.hasNextPage,
+        hasPrevPage: products.hasPrevPage,
       },
     })
   } catch (error) {
     console.error("Search products error:", error)
     res.status(500).json({
       success: false,
-      message: "Failed to search products",
+      message: "Server error",
       error: error.message,
     })
   }
@@ -1519,16 +1417,13 @@ exports.getFeaturedProducts = async (req, res) => {
   try {
     const { limit = 8 } = req.query
 
-    const products = await Product.find({
-      featured: true,
-      status: "published",
-    })
-      .limit(Number.parseInt(limit))
+    const products = await Product.find({ featured: true, status: "published" })
       .populate("category", "name slug")
       .populate("brand", "name logo")
       .sort({ createdAt: -1 })
+      .limit(Number(limit))
 
-    res.json({
+    res.status(200).json({
       success: true,
       products,
     })
@@ -1536,7 +1431,56 @@ exports.getFeaturedProducts = async (req, res) => {
     console.error("Get featured products error:", error)
     res.status(500).json({
       success: false,
-      message: "Failed to fetch featured products",
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Generate barcode for product
+// @route   POST /api/products/:id/generate-barcode
+// @access  Private/Admin
+exports.generateBarcode = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      })
+    }
+
+    // Generate new barcode
+    const generateBarcode = () => {
+      return Date.now().toString() + Math.random().toString(36).substr(2, 5).toUpperCase()
+    }
+
+    let newBarcode
+    let isUnique = false
+
+    // Ensure barcode is unique
+    while (!isUnique) {
+      newBarcode = generateBarcode()
+      const existingProduct = await Product.findOne({ barcode: newBarcode })
+      if (!existingProduct) {
+        isUnique = true
+      }
+    }
+
+    product.barcode = newBarcode
+    await product.save()
+
+    res.status(200).json({
+      success: true,
+      message: "Barcode generated successfully",
+      barcode: newBarcode,
+    })
+  } catch (error) {
+    console.error("Generate barcode error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
       error: error.message,
     })
   }

@@ -4,20 +4,13 @@ const {
   getProducts,
   getProduct,
   getProductBySlug,
+  getProductByBarcode,
   createProduct,
   updateProduct,
   deleteProduct,
-  updateProductStatus,
-  addProductReview,
-  getProductVariants,
-  addProductVariant,
-  updateProductVariant,
-  deleteProductVariant,
-  updateVariationTypes,
-  bulkStockUpdate,
   searchProducts,
   getFeaturedProducts,
-  getRelatedProducts,
+  generateBarcode,
 } = require("../controllers/product.controller")
 const { protect, admin } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
@@ -27,28 +20,41 @@ router.get("/", getProducts)
 router.get("/search", searchProducts)
 router.get("/featured", getFeaturedProducts)
 router.get("/slug/:slug", getProductBySlug)
+router.get("/barcode/:barcode", getProductByBarcode)
 router.get("/:id", getProduct)
-router.get("/:id/variants", getProductVariants)
-router.get("/:id/related", getRelatedProducts)
 
-// Protected routes
-router.post("/:id/reviews", protect, addProductReview)
+// Protected routes (Admin only)
+router.post(
+  "/",
+  protect,
+  admin,
+  upload.fields([
+    { name: "images", maxCount: 10 },
+    { name: "variantImages_0", maxCount: 5 },
+    { name: "variantImages_1", maxCount: 5 },
+    { name: "variantImages_2", maxCount: 5 },
+    { name: "variantImages_3", maxCount: 5 },
+    { name: "variantImages_4", maxCount: 5 },
+  ]),
+  createProduct,
+)
 
-// Admin routes
-router.post("/", protect, admin, upload.any(), createProduct)
-router.put("/:id", protect, admin, upload.any(), updateProduct)
+router.put(
+  "/:id",
+  protect,
+  admin,
+  upload.fields([
+    { name: "images", maxCount: 10 },
+    { name: "variantImages_0", maxCount: 5 },
+    { name: "variantImages_1", maxCount: 5 },
+    { name: "variantImages_2", maxCount: 5 },
+    { name: "variantImages_3", maxCount: 5 },
+    { name: "variantImages_4", maxCount: 5 },
+  ]),
+  updateProduct,
+)
+
 router.delete("/:id", protect, admin, deleteProduct)
-router.patch("/:id/status", protect, admin, updateProductStatus)
-
-// Variant routes
-router.post("/:id/variants", protect, admin, upload.any(), addProductVariant)
-router.put("/:id/variants/:variantId", protect, admin, upload.any(), updateProductVariant)
-router.delete("/:id/variants/:variantId", protect, admin, deleteProductVariant)
-
-// Variation types routes
-router.put("/:id/variation-types", protect, admin, updateVariationTypes)
-
-// Bulk operations
-router.put("/bulk-stock-update", protect, admin, bulkStockUpdate)
+router.post("/:id/generate-barcode", protect, admin, generateBarcode)
 
 module.exports = router
