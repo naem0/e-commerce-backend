@@ -371,7 +371,7 @@ exports.createProduct = async (req, res) => {
       }
     }
 
-    // Check if barcode already exists
+    // Check if barcode already exists (if provided)
     if (barcode) {
       const existingBarcode = await Product.findOne({ barcode })
       if (existingBarcode) {
@@ -431,7 +431,7 @@ exports.createProduct = async (req, res) => {
       stock: Number(stock),
       images,
       sku,
-      barcode,
+      barcode: barcode || undefined, // Allow manual barcode or auto-generate
       featured: featured === "true",
       status: status || "draft",
       weight: weight ? Number(weight) : undefined,
@@ -1478,6 +1478,58 @@ exports.generateBarcode = async (req, res) => {
     })
   } catch (error) {
     console.error("Generate barcode error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Print barcode for product
+// @route   GET /api/products/:id/print-barcode
+// @access  Private/Admin
+exports.printBarcode = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { quantity = 1, format = "CODE128" } = req.query
+
+    const product = await Product.findById(id).populate("category", "name").populate("brand", "name")
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      })
+    }
+
+    if (!product.barcode) {
+      return res.status(400).json({
+        success: false,
+        message: "Product does not have a barcode",
+      })
+    }
+
+    // Generate barcode print data
+    const barcodeData = {
+      barcode: product.barcode,
+      productName: product.name,
+      price: product.price,
+      sku: product.sku,
+      category: product.category?.name,
+      brand: product.brand?.name,
+      quantity: Number(quantity),
+      format: format,
+      printDate: new Date().toISOString(),
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Barcode data generated successfully",
+      data: barcodeData,
+    })
+  } catch (error) {
+    console.error("Print barcode error:", error)
     res.status(500).json({
       success: false,
       message: "Server error",
