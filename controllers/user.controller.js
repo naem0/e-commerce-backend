@@ -39,7 +39,7 @@ exports.getUsers = async (req, res) => {
     const query = {}
 
     // Filter by role
-    if (role) {
+    if (role && role !== "all") {
       query.role = role
     }
 
@@ -108,7 +108,7 @@ exports.getUser = async (req, res) => {
 // @access  Private/Admin
 exports.updateUser = async (req, res) => {
   try {
-    const { name, email, role, isActive } = req.body
+    const { name, email, role, isActive, status, permissions, customPermissions } = req.body
 
     // Find user
     let user = await User.findById(req.params.id)
@@ -138,6 +138,9 @@ exports.updateUser = async (req, res) => {
         email: email || user.email,
         role: role || user.role,
         isActive: isActive !== undefined ? isActive : user.isActive,
+        status: status || user.status,
+        permissions: permissions || user.permissions,
+        customPermissions: customPermissions !== undefined ? customPermissions : user.customPermissions,
       },
       { new: true },
     ).select("-password")
@@ -252,6 +255,173 @@ exports.updateProfile = async (req, res) => {
     })
   } catch (error) {
     console.error("Update profile error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Assign role to user
+// @route   PUT /api/users/:id/role
+// @access  Private/Admin
+exports.assignUserRole = async (req, res) => {
+  try {
+    const { role } = req.body
+
+    if (!role) {
+      return res.status(400).json({
+        success: false,
+        message: "Role is required",
+      })
+    }
+
+    // Validate role
+    const validRoles = ["SUPER_ADMIN", "ADMIN", "MANAGER", "EMPLOYEE", "CASHIER", "CUSTOMER"]
+    if (!validRoles.includes(role.toUpperCase())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role",
+      })
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, { role: role.toUpperCase() }, { new: true }).select(
+      "-password",
+    )
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Role assigned successfully",
+      user,
+    })
+  } catch (error) {
+    console.error("Assign role error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Get user roles
+// @route   GET /api/users/:id/roles
+// @access  Private/Admin
+exports.getUserRoles = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("role permissions")
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    res.status(200).json({
+      success: true,
+      roles: [user.role],
+      permissions: user.permissions || [],
+    })
+  } catch (error) {
+    console.error("Get user roles error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Update user permissions
+// @route   PUT /api/users/:id/permissions
+// @access  Private/Admin
+exports.updateUserPermissions = async (req, res) => {
+  try {
+    const { permissions } = req.body
+
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({
+        success: false,
+        message: "Permissions must be an array",
+      })
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { permissions, customPermissions: true },
+      { new: true },
+    ).select("-password")
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Permissions updated successfully",
+      user,
+    })
+  } catch (error) {
+    console.error("Update permissions error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Bulk assign roles to multiple users
+// @route   POST /api/users/bulk-assign-roles
+// @access  Private/Admin
+exports.bulkAssignRoles = async (req, res) => {
+  try {
+    const { userIds, role } = req.body
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "User IDs array is required",
+      })
+    }
+
+    if (!role) {
+      return res.status(400).json({
+        success: false,
+        message: "Role is required",
+      })
+    }
+
+    // Validate role
+    const validRoles = ["SUPER_ADMIN", "ADMIN", "MANAGER", "EMPLOYEE", "CASHIER", "CUSTOMER"]
+    if (!validRoles.includes(role.toUpperCase())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role",
+      })
+    }
+
+    const result = await User.updateMany({ _id: { $in: userIds } }, { role: role.toUpperCase() })
+
+    res.status(200).json({
+      success: true,
+      message: `Role assigned to ${result.modifiedCount} users`,
+      modifiedCount: result.modifiedCount,
+    })
+  } catch (error) {
+    console.error("Bulk assign roles error:", error)
     res.status(500).json({
       success: false,
       message: "Server error",

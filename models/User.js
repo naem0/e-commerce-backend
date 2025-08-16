@@ -89,6 +89,27 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    status: {
+      type: String,
+      enum: ["active", "inactive", "suspended"],
+      default: "active",
+    },
+    permissions: {
+    type: [String],
+    default: [],
+  },
+  customPermissions: {
+    type: Boolean,
+    default: false,
+  },
+  roleAssignedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  roleAssignedAt: {
+    type: Date,
+    default: Date.now,
+  },
   },
   {
     timestamps: true,
