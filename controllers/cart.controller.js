@@ -19,23 +19,16 @@ exports.getCart = async (req, res) => {
     }
 
     // Calculate totals
-    let subtotal = 0
-    let totalItems = 0
-
-    cart.items.forEach((item) => {
-      const price = item.product.salePrice || item.product.price
-      subtotal += price * item.quantity
-      totalItems += item.quantity
-    })
+    const totals = await cart.calculateTotals()
 
     return res.status(200).json({
       success: true,
       cart: {
         _id: cart._id,
         items: cart.items,
-        subtotal,
-        total: subtotal,
-        totalItems,
+        subtotal: totals.subtotal,
+        total: totals.total,
+        totalItems: totals.totalItems,
       },
     })
   } catch (error) {
@@ -70,7 +63,7 @@ exports.addToCart = async (req, res) => {
       })
     }
 
-    // Check if product exists and is in stock
+    // Check if product exists
     const product = await Product.findById(productId)
     if (!product) {
       return res.status(404).json({
@@ -79,7 +72,25 @@ exports.addToCart = async (req, res) => {
       })
     }
 
-    if (product.stock < quantity) {
+    let price = product.price
+    let stock = product.stock
+    let selectedVariant = null
+
+    if (variation) {
+      selectedVariant = product.variants.find(v => v._id.toString() === variation)
+      if (selectedVariant) {
+        price = selectedVariant.price
+        stock = selectedVariant.stock
+        console.log(selectedVariant)
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "Variation not found",
+        })
+      }
+    }
+
+    if (stock < quantity) {
       return res.status(400).json({
         success: false,
         message: "Not enough stock available",
@@ -94,7 +105,7 @@ exports.addToCart = async (req, res) => {
 
     // Check if product already exists in cart
     const existingItemIndex = cart.items.findIndex(
-      (item) => item.product.toString() === productId && JSON.stringify(item.variation) === JSON.stringify(variation),
+      (item) => item.product.toString() === productId && item.variation?._id.toString() === variation,
     )
 
     if (existingItemIndex !== -1) {
@@ -105,7 +116,8 @@ exports.addToCart = async (req, res) => {
       cart.items.push({
         product: productId,
         quantity,
-        variation,
+        variation: selectedVariant,
+        price,
       })
     }
 
@@ -119,14 +131,7 @@ exports.addToCart = async (req, res) => {
     })
 
     // Calculate totals
-    let subtotal = 0
-    let totalItems = 0
-
-    cart.items.forEach((item) => {
-      const price = item.product.salePrice || item.product.price
-      subtotal += price * item.quantity
-      totalItems += item.quantity
-    })
+    const totals = await cart.calculateTotals()
 
     return res.status(200).json({
       success: true,
@@ -134,9 +139,9 @@ exports.addToCart = async (req, res) => {
       cart: {
         _id: cart._id,
         items: cart.items,
-        subtotal,
-        total: subtotal,
-        totalItems,
+        subtotal: totals.subtotal,
+        total: totals.total,
+        totalItems: totals.totalItems,
       },
     })
   } catch (error) {

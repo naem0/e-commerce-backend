@@ -16,6 +16,10 @@ const CartItemSchema = new mongoose.Schema({
     type: Object,
     default: null,
   },
+  price: {
+    type: Number,
+    required: true,
+  },
   addedAt: {
     type: Date,
     default: Date.now,
@@ -59,7 +63,7 @@ CartSchema.methods.calculateTotals = async function () {
   let totalItems = 0
 
   this.items.forEach((item) => {
-    const price = item.product.salePrice || item.product.price
+    const price = item.price
     subtotal += price * item.quantity
     totalItems += item.quantity
   })
