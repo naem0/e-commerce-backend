@@ -26,6 +26,9 @@ const orderSchema = new mongoose.Schema(
           min: [1, "Quantity cannot be less than 1"],
         },
         image: String,
+        variation: {
+          type: Object,
+        },
       },
     ],
     status: {

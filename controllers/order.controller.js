@@ -175,28 +175,52 @@ exports.createOrder = async (req, res) => {
         })
       }
 
-      if (product.stock < item.quantity) {
-        return res.status(400).json({
-          success: false,
-          message: `Not enough stock for ${product.name}. Available: ${product.stock}`,
-        })
+      let price = product.price
+      let stock = product.stock
+      let selectedVariant = null
+
+      if (item.variation) {
+        selectedVariant = product.variants.find(
+          (v) => v._id.toString() === item.variation._id.toString()
+        )
+        if (selectedVariant) {
+          price = selectedVariant.price
+          stock = selectedVariant.stock
+        } else {
+          return res.status(404).json({
+            success: false,
+            message: "Variation not found",
+          })
+        }
       }
 
-      // Use discount price if available, otherwise use regular price
-      const price = product.discountPrice || product.price
+      if (stock < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Not enough stock for ${product.name}. Available: ${stock}`,
+        })
+      }
 
       orderItems.push({
         product: product._id,
         name: product.name,
         price,
         quantity: item.quantity,
-        image: product.images?.[0] || "",
+        image: selectedVariant?.image || product.images?.[0] || "",
+        variation: selectedVariant,
       })
 
       subtotal += price * item.quantity
 
       // Update product stock
-      product.stock -= item.quantity
+      if (selectedVariant) {
+        const variantIndex = product.variants.findIndex(
+          (v) => v._id.toString() === item.variation._id.toString()
+        )
+        product.variants[variantIndex].stock -= item.quantity
+      } else {
+        product.stock -= item.quantity
+      }
       await product.save()
     }
 
