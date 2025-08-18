@@ -10,13 +10,23 @@ exports.getCart = async (req, res) => {
     // Find or create cart
     let cart = await Cart.findOne({ user: userId }).populate({
       path: "items.product",
-      select: "name price salePrice images stock",
+      select: "name price salePrice images stock variants", // Add variants
     })
 
     if (!cart) {
       cart = new Cart({ user: userId, items: [] })
       await cart.save()
     }
+
+    // Manually construct the items array to ensure correct format
+    const items = cart.items.map(item => ({
+        _id: item._id,
+        product: item.product,
+        quantity: item.quantity,
+        variation: item.variation,
+        price: item.price,
+    }));
+
 
     // Calculate totals
     const totals = await cart.calculateTotals()
@@ -25,7 +35,7 @@ exports.getCart = async (req, res) => {
       success: true,
       cart: {
         _id: cart._id,
-        items: cart.items,
+        items: items, // Use the manually constructed array
         subtotal: totals.subtotal,
         total: totals.total,
         totalItems: totals.totalItems,
@@ -81,7 +91,6 @@ exports.addToCart = async (req, res) => {
       if (selectedVariant) {
         price = selectedVariant.price
         stock = selectedVariant.stock
-        console.log(selectedVariant)
       } else {
         return res.status(404).json({
           success: false,
@@ -216,14 +225,7 @@ exports.updateCartItem = async (req, res) => {
     })
 
     // Calculate totals
-    let subtotal = 0
-    let totalItems = 0
-
-    cart.items.forEach((item) => {
-      const price = item.product.salePrice || item.product.price
-      subtotal += price * item.quantity
-      totalItems += item.quantity
-    })
+    const totals = await cart.calculateTotals()
 
     return res.status(200).json({
       success: true,
@@ -231,9 +233,9 @@ exports.updateCartItem = async (req, res) => {
       cart: {
         _id: cart._id,
         items: cart.items,
-        subtotal,
-        total: subtotal,
-        totalItems,
+        subtotal: totals.subtotal,
+        total: totals.total,
+        totalItems: totals.totalItems,
       },
     })
   } catch (error) {
@@ -274,14 +276,7 @@ exports.removeFromCart = async (req, res) => {
     })
 
     // Calculate totals
-    let subtotal = 0
-    let totalItems = 0
-
-    cart.items.forEach((item) => {
-      const price = item.product.salePrice || item.product.price
-      subtotal += price * item.quantity
-      totalItems += item.quantity
-    })
+    const totals = await cart.calculateTotals()
 
     return res.status(200).json({
       success: true,
@@ -289,9 +284,9 @@ exports.removeFromCart = async (req, res) => {
       cart: {
         _id: cart._id,
         items: cart.items,
-        subtotal,
-        total: subtotal,
-        totalItems,
+        subtotal: totals.subtotal,
+        total: totals.total,
+        totalItems: totals.totalItems,
       },
     })
   } catch (error) {
@@ -379,11 +374,13 @@ exports.syncCart = async (req, res) => {
         continue
       }
 
+      const variationId = variation ? variation._id : null
+
       // Check if product already exists in cart
       const existingItemIndex = cart.items.findIndex(
         (cartItem) =>
           cartItem.product.toString() === product._id &&
-          JSON.stringify(cartItem.variation) === JSON.stringify(variation),
+          (cartItem.variation ? cartItem.variation._id.toString() : null) === variationId
       )
 
       if (existingItemIndex !== -1) {
@@ -409,14 +406,7 @@ exports.syncCart = async (req, res) => {
     })
 
     // Calculate totals
-    let subtotal = 0
-    let totalItems = 0
-
-    cart.items.forEach((item) => {
-      const price = item.product.salePrice || item.product.price
-      subtotal += price * item.quantity
-      totalItems += item.quantity
-    })
+    const totals = await cart.calculateTotals()
 
     return res.status(200).json({
       success: true,
@@ -424,9 +414,9 @@ exports.syncCart = async (req, res) => {
       cart: {
         _id: cart._id,
         items: cart.items,
-        subtotal,
-        total: subtotal,
-        totalItems,
+        subtotal: totals.subtotal,
+        total: totals.total,
+        totalItems: totals.totalItems,
       },
     })
   } catch (error) {
