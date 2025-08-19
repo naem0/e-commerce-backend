@@ -135,13 +135,13 @@ exports.getProductReviews = async (req, res) => {
 // @access  Private
 exports.createReview = async (req, res) => {
   try {
-    const { product, order, rating, title, comment } = req.body
+    const { productId: product, orderId: order, rating, title, comment } = req.body
 
     // Validate required fields
-    if (!product || !order || !rating || !title || !comment) {
+    if (!rating || !title) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required",
+        message: "Rating and title are required",
       })
     }
 
@@ -187,7 +187,7 @@ exports.createReview = async (req, res) => {
     // Handle image uploads
     let images = []
     if (req.files && req.files.length > 0) {
-      images = req.files.map((file) => `/uploads/reviews/${file.filename}`)
+      images = req.files.map((file) => `/uploads/${file.filename}`)
     }
 
     // Create review
