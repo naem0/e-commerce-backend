@@ -104,6 +104,9 @@ const productSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    videoUrl: {
+      type: String,
+    },
     sku: {
       type: String,
       unique: true,
