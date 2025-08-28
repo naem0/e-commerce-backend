@@ -524,3 +524,83 @@ exports.updatePaymentStatus = async (req, res) => {
     })
   }
 }
+
+
+// @desc    Create a new order by admin
+// @route   POST /api/orders/admin
+// @access  Private/Admin
+exports.createOrderByAdmin = async (req, res) => { 
+  try {
+    const { user, items, status, total } = req.body
+
+    if (!user || !items || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide user, items, status and total",
+      })
+    }
+
+    // Verify items and calculate prices
+    const orderItems = []
+    let subtotal = 0
+
+    for (const item of items) {
+      const product = await Product.findById(item.product)
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: `Product not found: ${item.product}`,
+        })
+      }
+
+      let price = product.price
+      let stock = product.stock
+
+      if (stock < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Not enough stock for ${product.name}. Available: ${stock}`,
+        })
+      }
+
+      orderItems.push({
+        product: product._id,
+        name: product.name,
+        price,
+        quantity: item.quantity,
+        image: product.images?.[0] || "",
+      })
+
+      subtotal += price * item.quantity
+
+      // Update product stock
+      product.stock -= item.quantity
+      await product.save()
+    }
+
+    // Create order
+    const order = await Order.create({
+      user,
+      items: orderItems,
+      status,
+      total,
+      subtotal,
+      tax: 0,
+      shippingCost: 0,
+      paidAmount: 0,
+    })
+
+    res.status(201).json({
+      success: true,
+      order,
+    })
+  } catch (error) {
+    console.error("Create order by admin error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
