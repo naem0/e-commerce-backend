@@ -13,10 +13,10 @@ router.get("/", getCart)
 router.post("/items", addToCart)
 
 // Update cart item
-router.put("/items/:itemId", updateCartItem)
+router.put("/items", updateCartItem)
 
 // Remove item from cart
-router.delete("/items/:itemId", removeFromCart)
+router.delete("/items", removeFromCart)
 
 // Clear cart
 router.delete("/", clearCart)
