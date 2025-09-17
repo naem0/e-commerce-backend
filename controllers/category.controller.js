@@ -508,7 +508,7 @@ exports.getCategoryTree = async (req, res) => {
       query.status = status
     }
 
-    const categories = await Category.find(query).sort({ sortOrder: 1, name: 1 })
+    const categories = await Category.find().sort({ sortOrder: 1, name: 1 })
 
     const buildTree = async (parentId) => {
       const children = await Category.find({ parent: parentId, status: query.status }).sort({

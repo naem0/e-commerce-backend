@@ -7,6 +7,7 @@ const {
   updateCategory,
   deleteCategory,
   getCategoryBySlug,
+  getCategoryTree
 } = require("../controllers/category.controller")
 const { protect, admin } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
@@ -15,6 +16,7 @@ const upload = require("../middleware/upload.middleware")
 router.get("/", getCategories)
 router.get("/:id", getCategory)
 router.get("/slug/:slug", getCategoryBySlug)
+router.get("/tree/all", getCategoryTree)
 
 // Protected routes
 router.post("/", protect, admin, upload.single("image"), createCategory)
