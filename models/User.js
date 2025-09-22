@@ -50,7 +50,6 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Please add a password"],
       minlength: 6,
       select: false,
     },
@@ -85,31 +84,14 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    provider: {
+      type: String,
+      default: 'credentials',
+    },
     phoneVerified: {
       type: Boolean,
       default: false,
     },
-    status: {
-      type: String,
-      enum: ["active", "inactive", "suspended"],
-      default: "active",
-    },
-    permissions: {
-    type: [String],
-    default: [],
-  },
-  customPermissions: {
-    type: Boolean,
-    default: false,
-  },
-  roleAssignedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-  },
-  roleAssignedAt: {
-    type: Date,
-    default: Date.now,
-  },
   },
   {
     timestamps: true,
@@ -118,8 +100,8 @@ const userSchema = new mongoose.Schema(
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    next()
+  if (!this.isModified("password") || !this.password) {
+    return next();
   }
 
   const salt = await bcrypt.genSalt(10)

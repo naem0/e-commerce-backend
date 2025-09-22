@@ -313,6 +313,70 @@ exports.resetPassword = async (req, res) => {
   }
 }
 
+// @desc    Login or Register user via Google
+// @route   POST /api/auth/google-login
+// @access  Public
+exports.googleLogin = async (req, res) => {
+  try {
+    const { name, email, image, provider } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required for Google login.",
+      });
+    }
+
+    let user = await User.findOne({ email });
+
+    if (user) {
+      // User exists, check provider
+      if (user.provider !== 'google' && user.provider !== 'credentials') {
+        return res.status(400).json({
+          success: false,
+          message: `You have already signed up with ${user.provider}. Please use that method to log in.`,
+        });
+      }
+      // If user exists with google provider, just log them in
+      // If user exists with credentials, we can link the account by updating the provider
+      user.provider = 'google';
+      user.avatar = user.avatar || image;
+      await user.save();
+
+    } else {
+      // User does not exist, create a new user
+      user = await User.create({
+        name,
+        email,
+        avatar: image,
+        provider,
+        emailVerified: true, // Email is verified by Google
+      });
+    }
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Google login error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error during Google login.",
+      error: error.message,
+    });
+  }
+};
+
 // @desc    Verify reset token
 // @route   GET /api/auth/verify-reset-token/:token
 // @access  Public
