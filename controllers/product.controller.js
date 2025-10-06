@@ -653,6 +653,7 @@ exports.updateProduct = async (req, res) => {
     if (req.body.videoUrl) {
       updateData.videoUrl = req.body.videoUrl;
     }
+    console.log("Updated videoUrl:", req.body.videoUrl);
 
     // Handle variations
     if (updateData.hasVariations) {
