@@ -628,37 +628,30 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-        // Initialize image arrays
-    const mainProductImages = [];
-    const variantImagesMap = new Map(); // Map to store variant images by variant index
+    // Handle images
+    let existingImages = [];
+    if (req.body.images) {
+      try {
+        existingImages = JSON.parse(req.body.images);
+      } catch (e) {
+        console.error("Invalid images format:", e);
+      }
+    }
 
-    // Process all uploaded files
+    const newImages = [];
     if (req.files && req.files.length > 0) {
       req.files.forEach(file => {
-        if (file.fieldname === 'images') {
-          mainProductImages.push(`/uploads/${file.filename}`);
-        } else if (file.fieldname.startsWith('variantImages_')) {
-          const variantIndex = parseInt(file.fieldname.split('_')[1]);
-          if (!variantImagesMap.has(variantIndex)) {
-            variantImagesMap.set(variantIndex, []);
-          }
-          variantImagesMap.get(variantIndex).push(`/uploads/${file.filename}`);
+        if (file.fieldname === 'newImages') {
+          newImages.push(`/uploads/${file.filename}`);
         }
       });
     }
 
-    // Handle main product images
-    if (mainProductImages.length > 0) {
-      // Delete old images
-      if (product.images && product.images.length > 0) {
-        product.images.forEach((imagePath) => {
-          const fullPath = path.join(__dirname, "..", imagePath)
-          if (fs.existsSync(fullPath)) {
-            fs.unlinkSync(fullPath)
-          }
-        })
-      }
-      updateData.images = mainProductImages;
+    updateData.images = [...existingImages, ...newImages];
+
+    // video url
+    if (req.body.videoUrl) {
+      updateData.videoUrl = req.body.videoUrl;
     }
 
     // Handle variations
