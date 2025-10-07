@@ -2,7 +2,11 @@ const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 
 const addressSchema = new mongoose.Schema({
-  name: {
+  label: {
+    type: String,
+    required: true,
+  },
+  fullName: {
     type: String,
     required: true,
   },
@@ -10,22 +14,23 @@ const addressSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  street: {
+  addressLine1: {
     type: String,
     required: true,
   },
+  addressLine2: String,
   city: {
     type: String,
     required: true,
   },
-  state: {
+  state: String,
+  postalCode: {
     type: String,
-  },
-  zipCode: {
-    type: String,
+    required: true,
   },
   country: {
     type: String,
+    required: true,
     default: "Bangladesh",
   },
   isDefault: {
@@ -38,56 +43,57 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, "Please add a name"],
+      required: true,
       trim: true,
     },
     email: {
       type: String,
-      required: [true, "Please add an email"],
+      required: true,
       unique: true,
       lowercase: true,
       trim: true,
     },
     password: {
       type: String,
-      required: [true, "Please add a password"],
-      minlength: 6,
+      required: true,
       select: false,
-    },
-    role: {
-      type: String,
-      enum: ["user", "admin"],
-      default: "user",
     },
     phone: {
       type: String,
       trim: true,
     },
-    dateOfBirth: {
-      type: Date,
+    role: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Role",
+      required: true,
     },
+    customPermissions: {
+      type: [String],
+      default: [],
+    },
+    hasCustomPermissions: {
+      type: Boolean,
+      default: false,
+    },
+    addresses: [addressSchema],
+    dateOfBirth: Date,
     gender: {
       type: String,
       enum: ["male", "female", "other"],
     },
-    avatar: {
-      type: String,
-    },
-    addresses: [addressSchema],
+    avatar: String,
     isActive: {
       type: Boolean,
       default: true,
-    },
-    lastLogin: {
-      type: Date,
     },
     emailVerified: {
       type: Boolean,
       default: false,
     },
-    phoneVerified: {
-      type: Boolean,
-      default: false,
+    lastLogin: Date,
+    loginCount: {
+      type: Number,
+      default: 0,
     },
   },
   {
@@ -95,35 +101,51 @@ const userSchema = new mongoose.Schema(
   },
 )
 
+// Index for faster queries
+userSchema.index({ email: 1 })
+userSchema.index({ role: 1 })
+userSchema.index({ isActive: 1 })
+
 // Hash password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
-    next()
+    return next()
   }
 
-  const salt = await bcrypt.genSalt(10)
-  this.password = await bcrypt.hash(this.password, salt)
+  try {
+    const salt = await bcrypt.genSalt(10)
+    this.password = await bcrypt.hash(this.password, salt)
+    next()
+  } catch (error) {
+    next(error)
+  }
 })
 
 // Compare password method
-userSchema.methods.comparePassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password)
+userSchema.methods.comparePassword = async function (candidatePassword) {
+  try {
+    return await bcrypt.compare(candidatePassword, this.password)
+  } catch (error) {
+    throw new Error("Password comparison failed")
+  }
 }
 
-// Ensure only one default address
-userSchema.pre("save", function (next) {
-  if (this.addresses && this.addresses.length > 0) {
-    const defaultAddresses = this.addresses.filter((addr) => addr.isDefault)
-    if (defaultAddresses.length > 1) {
-      // Keep only the last one as default
-      this.addresses.forEach((addr, index) => {
-        if (index < this.addresses.length - 1) {
-          addr.isDefault = false
-        }
-      })
-    }
+// Get user permissions (from role + custom)
+userSchema.methods.getPermissions = async function () {
+  if (this.hasCustomPermissions) {
+    return this.customPermissions
   }
-  next()
-})
 
-module.exports = mongoose.model("User", userSchema)
+  await this.populate("role")
+  return this.role?.permissions || []
+}
+
+// Check if user has permission
+userSchema.methods.hasPermission = async function (permission) {
+  const permissions = await this.getPermissions()
+  return permissions.includes(permission) || permissions.includes("*")
+}
+
+const User = mongoose.model("User", userSchema)
+
+module.exports = User

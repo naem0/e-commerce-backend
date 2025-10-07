@@ -57,6 +57,8 @@ app.use("/api/analytics", analyticsRoutes)
 app.use("/api/wishlist", wishlistRoutes)
 app.use("/api/reviews", reviewRoutes)
 app.use('/api/chatbot', chatbotRoutes)
+app.use("/api/roles", require("./routes/role.routes"))
+app.use("/api/permissions", require("./routes/permission.routes"))
 
 
 // Error handling middleware
