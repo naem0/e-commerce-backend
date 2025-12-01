@@ -45,7 +45,7 @@ const variantSchema = new mongoose.Schema({
   isDefault: { type: Boolean, default: false },
   status: {
     type: String,
-    enum: ["active", "inactive"],
+    enum: ["active", "inactive", "archived"],
     default: "active",
   },
 })
