@@ -2,7 +2,7 @@ const User = require("../models/User")
 const PasswordReset = require("../models/PasswordReset")
 const jwt = require("jsonwebtoken")
 const crypto = require("crypto")
-const nodemailer = require("nodemailer")
+const { sendEmail } = require("../services/email.service")
 
 // Generate JWT token
 const generateToken = (id) => {
@@ -11,18 +11,7 @@ const generateToken = (id) => {
   })
 }
 
-// Email transporter setup
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: process.env.SMTP_PORT || 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  })
-}
+// Remove createTransporter as it's now in email.service
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
@@ -207,11 +196,8 @@ exports.forgotPassword = async (req, res) => {
     // Send email
     if (process.env.SMTP_USER && process.env.SMTP_PASS) {
       try {
-        const transporter = createTransporter()
-
-        await transporter.sendMail({
-          from: `"E-commerce Support" <${process.env.SMTP_USER}>`,
-          to: user.email,
+        await sendEmail({
+          email: user.email,
           subject: "Password Reset Request",
           html: message,
         })

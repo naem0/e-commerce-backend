@@ -2,6 +2,7 @@ const Order = require("../models/Order")
 const Product = require("../models/Product")
 const User = require("../models/User")
 const mongoose = require("mongoose")
+const { sendEmail } = require("../services/email.service")
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -161,6 +162,20 @@ exports.createOrder = async (req, res) => {
       })
     }
 
+    if (!shippingAddress || !shippingAddress.name || !shippingAddress.phone || !shippingAddress.street || !shippingAddress.city) {
+      return res.status(400).json({
+        success: false,
+        message: "Full shipping address (Name, Phone, Street, City) is required",
+      })
+    }
+
+    if (shippingAddress.phone.length < 11) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid phone number is required",
+      })
+    }
+
     // Verify items and calculate prices
     const orderItems = []
     let subtotal = 0
@@ -224,9 +239,9 @@ exports.createOrder = async (req, res) => {
       await product.save()
     }
 
-    // Calculate tax and shipping (simplified for demo)
-    const tax = subtotal * 0.05 // 5% tax
-    const shippingCost = subtotal > 100 ? 0 : 10 // Free shipping over $100
+    // Calculate tax and shipping
+    const tax = 0 // Removed tax as per user request
+    const shippingCost = shippingAddress.shippingArea === "outside_dhaka" ? 120 : 70
     const total = subtotal + tax + shippingCost
 
     // Create order
@@ -240,9 +255,87 @@ exports.createOrder = async (req, res) => {
       tax,
       shippingCost,
       total,
-      paidAmount: paymentMethod === "cod" ? 0 : 0, // COD starts with 0 paid
+      paidAmount: 0,
       notes,
     })
+
+    // Send confirmation email if user email exists
+    if (shippingAddress.email) {
+      try {
+        const orderId = order._id.toString()
+        const orderNumber = order.orderNumber
+        const itemsHtml = orderItems.map(item => `
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name} (${item.quantity})</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">৳${item.price * item.quantity}</td>
+          </tr>
+        `).join("")
+
+        const emailHtml = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #3b82f6; color: white; padding: 20px; text-align: center;">
+              <h1 style="margin: 0;">Order Confirmed!</h1>
+              <p style="margin: 5px 0 0;">Thank you for shopping with us.</p>
+            </div>
+            <div style="padding: 20px;">
+              <p>Hi ${shippingAddress.name},</p>
+              <p>Your order <strong>${orderNumber}</strong> has been received and is being processed.</p>
+              
+              <div style="margin: 20px 0; border: 1px solid #eee; borders-radius: 4px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="background-color: #f9fafb;">
+                      <th style="padding: 8px; text-align: left; border-bottom: 1px solid #eee;">Item</th>
+                      <th style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${itemsHtml}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td style="padding: 8px; font-weight: bold;">Subtotal</td>
+                      <td style="padding: 8px; text-align: right; font-weight: bold;">৳${subtotal}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px;">Shipping</td>
+                      <td style="padding: 8px; text-align: right;">৳${shippingCost}</td>
+                    </tr>
+                    <tr style="font-size: 1.2em; border-top: 2px solid #eee;">
+                      <td style="padding: 8px; font-weight: bold;">Total</td>
+                      <td style="padding: 8px; text-align: right; font-weight: bold; color: #3b82f6;">৳${total}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              
+              <p><strong>Shipping To:</strong><br>
+              ${shippingAddress.street}, ${shippingAddress.city}<br>
+              Phone: ${shippingAddress.phone}</p>
+              
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${orderId}" 
+                   style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                   View Order Details
+                </a>
+              </div>
+            </div>
+            <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e0e0e0;">
+              <p>&copy; ${new Date().getFullYear()} Equal Fashion. All rights reserved.</p>
+            </div>
+          </div>
+        `
+
+        await sendEmail({
+          email: shippingAddress.email,
+          subject: `Order Confirmation - ${orderNumber}`,
+          html: emailHtml
+        })
+      } catch (emailError) {
+        console.error("Order confirmation email failed:", emailError)
+        // Don't fail the order if email fails
+      }
+    }
 
     res.status(201).json({
       success: true,

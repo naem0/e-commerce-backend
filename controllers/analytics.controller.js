@@ -3,6 +3,7 @@ const Product = require("../models/Product")
 const User = require("../models/User")
 const Category = require("../models/Category")
 const Brand = require("../models/Brand")
+const Review = require("../models/Review")
 
 // @desc    Get dashboard analytics
 // @route   GET /api/analytics/dashboard
@@ -18,6 +19,7 @@ exports.getDashboardAnalytics = async (req, res) => {
     const totalProducts = await Product.countDocuments({ status: "published" })
     const totalOrders = await Order.countDocuments()
     const totalUsers = await User.countDocuments({ role: "user" })
+    const totalReviews = await Review.countDocuments()
     const totalCategories = await Category.countDocuments()
     const totalBrands = await Brand.countDocuments()
 
@@ -195,6 +197,7 @@ exports.getDashboardAnalytics = async (req, res) => {
           totalProducts,
           totalOrders,
           totalUsers,
+          totalReviews,
           totalCategories,
           totalBrands,
           totalRevenue: totalRevenue[0]?.totalRevenue || 0,

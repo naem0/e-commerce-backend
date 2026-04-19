@@ -10,6 +10,7 @@ const {
   deleteUser,
   updateProfile,
   getUserProfile,
+  getUserAddresses,
   assignUserRole,
   getUserRoles,
   updateUserPermissions,
@@ -19,6 +20,7 @@ const {
 // User profile routes (must come before /:id routes)
 router.get("/profile", protect, getUserProfile)
 router.put("/profile", protect, updateProfile)
+router.get("/addresses", protect, getUserAddresses)
 
 // Role management routes
 router.get("/:id/roles", protect, admin, getUserRoles)

@@ -41,7 +41,16 @@ exports.getProducts = async (req, res) => {
     // Build query
     const query = {}
 
-    if (category) query.category = category
+    if (category && category !== "all") {
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        query.category = new mongoose.Types.ObjectId(category)
+      } else {
+        // If it's not a valid ID, maybe it's a slug? 
+        // But the frontend should pass ID. If Not ID, we ignore or handle.
+        // For now, let's log it.
+        console.log("Invalid Category ID received:", category)
+      }
+    }
     if (brand) query.brand = brand
     if (featured !== undefined) query.featured = featured === "true"
     if (status) query.status = status

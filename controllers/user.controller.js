@@ -263,6 +263,34 @@ exports.updateProfile = async (req, res) => {
   }
 }
 
+// @desc    Get user addresses
+// @route   GET /api/users/addresses
+// @access  Private
+exports.getUserAddresses = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("addresses")
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    res.status(200).json({
+      success: true,
+      addresses: user.addresses || [],
+    })
+  } catch (error) {
+    console.error("Get user addresses error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
 // @desc    Assign role to user
 // @route   PUT /api/users/:id/role
 // @access  Private/Admin

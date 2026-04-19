@@ -112,6 +112,13 @@ const siteSettingsSchema = new mongoose.Schema(
       twitter: { type: String, default: "" },
       instagram: { type: String, default: "" },
       youtube: { type: String, default: "" },
+      whatsapp: { type: String, default: "" },
+      messenger: { type: String, default: "" },
+    },
+    paymentMethods: {
+      bkash: { type: String, default: "" },
+      nagad: { type: String, default: "" },
+      rocket: { type: String, default: "" },
     },
     contactInfo: {
       email: { type: String, default: "" },

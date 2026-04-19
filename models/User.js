@@ -32,6 +32,11 @@ const addressSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  shippingArea: {
+    type: String,
+    enum: ["inside_dhaka", "outside_dhaka"],
+    default: "inside_dhaka",
+  },
 })
 
 const userSchema = new mongoose.Schema(
