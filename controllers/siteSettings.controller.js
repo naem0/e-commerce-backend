@@ -46,15 +46,27 @@ exports.updateSiteSettings = async (req, res) => {
     }
 
     // Update settings with all provided data
-    const updateData = {
-      ...req.body,
-      logo,
-      favicon,
-    }
+    // Multer might flatten nested objects into dot-notation keys (e.g. contactInfo.email)
+    // We should handle both flat and nested objects
+    const updateData = {}
+    
+    Object.keys(req.body).forEach(key => {
+      if (key.includes('.')) {
+        const [parent, child] = key.split('.')
+        if (!updateData[parent]) updateData[parent] = {}
+        updateData[parent][child] = req.body[key]
+      } else {
+        updateData[key] = req.body[key]
+      }
+    })
 
-    console.log("Updating settings with data:", Object.keys(updateData))
+    // Merge with logo and favicon
+    updateData.logo = logo
+    updateData.favicon = favicon
 
-    settings = await SiteSettings.findByIdAndUpdate(settings._id, updateData, {
+    console.log("Updating settings with processed data:", Object.keys(updateData))
+
+    settings = await SiteSettings.findByIdAndUpdate(settings._id, { $set: updateData }, {
       new: true,
       runValidators: true,
     })

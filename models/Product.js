@@ -181,6 +181,8 @@ const productSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
+      insideDhakaCharge: { type: Number, default: 70 },
+      outsideDhakaCharge: { type: Number, default: 120 },
       weight: { type: Number },
       dimensions: {
         length: { type: Number },
