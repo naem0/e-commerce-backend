@@ -391,40 +391,40 @@ exports.createProduct = async (req, res) => {
       }
     }
 
-    // Handle file uploads
+    console.log("Create Product Request Body:", req.body)
+    if (req.files) console.log("Create Product Files count:", req.files.length)
+
+    // Handle file uploads (req.files is an array with upload.any())
     const images = []
-    if (req.files && req.files.images) {
-      const imageFiles = Array.isArray(req.files.images) ? req.files.images : [req.files.images]
-      imageFiles.forEach((file) => {
-        images.push(`/uploads/products/${file.filename}`)
+    const variantImagesMap = new Map()
+
+    if (req.files && Array.isArray(req.files)) {
+      req.files.forEach((file) => {
+        if (file.fieldname === "images") {
+          images.push(`/uploads/${file.filename}`)
+        } else if (file.fieldname.startsWith("variantImages_")) {
+          const index = parseInt(file.fieldname.split("_")[1])
+          if (!variantImagesMap.has(index)) {
+            variantImagesMap.set(index, [])
+          }
+          variantImagesMap.get(index).push(`/uploads/${file.filename}`)
+        }
       })
     }
 
     // Process variants if hasVariations is true
     let processedVariants = []
-    if (hasVariations && variants) {
+    if (hasVariations === "true" && variants) {
+      console.log("Processing variants:", variants)
       const variantsData = typeof variants === "string" ? JSON.parse(variants) : variants
 
       processedVariants = variantsData.map((variant, index) => {
-        const variantImages = []
-
-        // Handle variant images
-        if (req.files) {
-          const variantImageKey = `variantImages_${index}`
-          if (req.files[variantImageKey]) {
-            const variantImageFiles = Array.isArray(req.files[variantImageKey])
-              ? req.files[variantImageKey]
-              : [req.files[variantImageKey]]
-
-            variantImageFiles.forEach((file) => {
-              variantImages.push(`/uploads/products/${file.filename}`)
-            })
-          }
-        }
-
+        console.log(`Variant ${index} Stock:`, variant.stock)
         return {
           ...variant,
-          images: variantImages,
+          images: variantImagesMap.get(index) || [],
+          price: Number(variant.price) || 0,
+          stock: Number(variant.stock) || 0,
         }
       })
     }
@@ -434,27 +434,28 @@ exports.createProduct = async (req, res) => {
       description,
       shortDescription,
       price: Number(price),
-      comparePrice: comparePrice ? Number(comparePrice) : undefined,
+      comparePrice: comparePrice ? Number(comparePrice) : 0,
       category,
       brand: brand || undefined,
       stock: Number(stock),
       images,
-      sku,
-      barcode: barcode || undefined, // Allow manual barcode or auto-generate
-      featured: featured === "true",
+      sku: sku || undefined,
+      barcode: barcode || undefined,
+      featured: featured === "true" || featured === true,
       status: status || "draft",
-      weight: weight ? Number(weight) : undefined,
-      dimensions: dimensions ? JSON.parse(dimensions) : undefined,
-      tags: tags ? JSON.parse(tags) : [],
-      seo: seo ? JSON.parse(seo) : undefined,
-      shipping: shipping ? JSON.parse(shipping) : undefined,
-      hasVariations: hasVariations === "true",
-      variationTypes: variationTypes ? JSON.parse(variationTypes) : [],
+      weight: weight ? Number(weight) : 0,
+      dimensions: dimensions ? (typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions) : undefined,
+      tags: tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : [],
+      seo: seo ? (typeof seo === 'string' ? JSON.parse(seo) : seo) : undefined,
+      shipping: shipping ? (typeof shipping === 'string' ? JSON.parse(shipping) : shipping) : undefined,
+      hasVariations: hasVariations === "true" || hasVariations === true,
+      variationTypes: variationTypes ? (typeof variationTypes === 'string' ? JSON.parse(variationTypes) : variationTypes) : [],
       variants: processedVariants,
       createdBy: req.user.id,
       specification,
     }
 
+    console.log("Final Product Data to Save:", productData)
     const product = await Product.create(productData)
 
     // Populate the created product
@@ -473,9 +474,9 @@ exports.createProduct = async (req, res) => {
     console.error("Create product error:", error)
 
     // Clean up uploaded files if error occurs
-    if (req.files && req.files.length > 0) {
+    if (req.files && Array.isArray(req.files)) {
       req.files.forEach((file) => {
-        const filePath = path.join(__dirname, "../uploads", file.filename)
+        const filePath = file.path
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath)
         }
@@ -626,26 +627,37 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    // Handle images
-    let existingImages = [];
+    console.log("Update Product Request Body:", req.body)
+    if (req.files) console.log("Update Product Files count:", req.files.length)
+
+    // Handle images (req.files is an array)
+    const newImages = []
+    const variantImagesMap = new Map()
+
+    if (req.files && Array.isArray(req.files)) {
+      req.files.forEach((file) => {
+        if (file.fieldname === "newImages") {
+          newImages.push(`/uploads/${file.filename}`)
+        } else if (file.fieldname.startsWith("variantImages_")) {
+          const index = parseInt(file.fieldname.split("_")[1])
+          if (!variantImagesMap.has(index)) {
+            variantImagesMap.set(index, [])
+          }
+          variantImagesMap.get(index).push(`/uploads/${file.filename}`)
+        }
+      })
+    }
+
+    let existingImages = []
     if (req.body.images) {
       try {
-        existingImages = JSON.parse(req.body.images);
+        existingImages = typeof req.body.images === "string" ? JSON.parse(req.body.images) : req.body.images
       } catch (e) {
-        console.error("Invalid images format:", e);
+        console.error("Invalid images format:", e)
       }
     }
 
-    const newImages = [];
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (file.fieldname === 'newImages') {
-          newImages.push(`/uploads/${file.filename}`);
-        }
-      });
-    }
-
-    updateData.images = [...existingImages, ...newImages];
+    updateData.images = [...existingImages, ...newImages]
 
     // video url
     if (req.body.videoUrl) {
@@ -669,26 +681,19 @@ exports.updateProduct = async (req, res) => {
           updateData.variants = parsedVariants.map((variant, index) => {
             const variantData = {
               ...variant,
-              price: Number.parseFloat(variant.price),
-              stock: Number.parseInt(variant.stock),
+              price: Number(variant.price) || 0,
+              stock: Number(variant.stock) || 0,
             }
 
             if (variant.comparePrice) {
-              variantData.comparePrice = Number.parseFloat(variant.comparePrice)
+              variantData.comparePrice = Number(variant.comparePrice)
             }
 
-            // Assign variant images from the map
+            // Assign variant images if new ones are uploaded for this variant index
             if (variantImagesMap.has(index)) {
-              // Delete old variant images if new ones are uploaded
-              if (variant.images && variant.images.length > 0) {
-                variant.images.forEach((imagePath) => {
-                  const fullPath = path.join(__dirname, "..", imagePath)
-                  if (fs.existsSync(fullPath)) {
-                    fs.unlinkSync(fullPath)
-                  }
-                })
-              }
-              variantData.images = variantImagesMap.get(index);
+              // Note: If you want to replace old images with new ones, you'd unlink old ones here.
+              // For simplicity, we just set the new images. 
+              variantData.images = variantImagesMap.get(index)
             }
 
             return variantData
