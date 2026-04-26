@@ -6,6 +6,7 @@ const Review = require("../models/Review")
 const upload = require("../middleware/upload.middleware")
 const path = require("path")
 const fs = require("fs")
+const { processImage } = require("../services/image.service")
 
 // Helper function to create slug from name
 const createSlug = (name) => {
@@ -399,32 +400,58 @@ exports.createProduct = async (req, res) => {
     const variantImagesMap = new Map()
 
     if (req.files && Array.isArray(req.files)) {
-      req.files.forEach((file) => {
+      for (const file of req.files) {
+        const processedPath = await processImage(file.path)
         if (file.fieldname === "images") {
-          images.push(`/uploads/${file.filename}`)
+          images.push(processedPath)
         } else if (file.fieldname.startsWith("variantImages_")) {
           const index = parseInt(file.fieldname.split("_")[1])
           if (!variantImagesMap.has(index)) {
             variantImagesMap.set(index, [])
           }
-          variantImagesMap.get(index).push(`/uploads/${file.filename}`)
+          variantImagesMap.get(index).push(processedPath)
         }
-      })
+      }
     }
 
     // Process variants if hasVariations is true
     let processedVariants = []
-    if (hasVariations === "true" && variants) {
-      console.log("Processing variants:", variants)
-      const variantsData = typeof variants === "string" ? JSON.parse(variants) : variants
+    if ((hasVariations === "true" || hasVariations === true) && variants) {
+      let variantsData
+      try {
+        variantsData = typeof variants === "string" ? JSON.parse(variants) : variants
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid variants data format",
+          error: err.message,
+        })
+      }
 
-      processedVariants = variantsData.map((variant, index) => {
-        console.log(`Variant ${index} Stock:`, variant.stock)
+        if (!Array.isArray(variantsData)) {
+          throw new Error("Variants must be an array")
+        }
+
+        processedVariants = variantsData.map((variant, index) => {
+          // Auto-generate SKU if not provided
+          const sku =
+            variant.sku && variant.sku.trim() ? variant.sku.trim() : `SKU-${Date.now()}-${index}`
+
+          // Filter out options with empty values safely
+          const cleanOptions = (variant.options || []).filter((o) => {
+            const hasType = o.type && typeof o.type === "string" && o.type.trim() !== ""
+            const hasValue = o.value && typeof o.value === "string" && o.value.trim() !== ""
+            return hasType && hasValue
+          })
+
         return {
           ...variant,
+          sku,
+          options: cleanOptions,
           images: variantImagesMap.get(index) || [],
           price: Number(variant.price) || 0,
           stock: Number(variant.stock) || 0,
+          status: variant.status || "active",
         }
       })
     }
@@ -635,17 +662,18 @@ exports.updateProduct = async (req, res) => {
     const variantImagesMap = new Map()
 
     if (req.files && Array.isArray(req.files)) {
-      req.files.forEach((file) => {
+      for (const file of req.files) {
+        const processedPath = await processImage(file.path)
         if (file.fieldname === "newImages") {
-          newImages.push(`/uploads/${file.filename}`)
+          newImages.push(processedPath)
         } else if (file.fieldname.startsWith("variantImages_")) {
           const index = parseInt(file.fieldname.split("_")[1])
           if (!variantImagesMap.has(index)) {
             variantImagesMap.set(index, [])
           }
-          variantImagesMap.get(index).push(`/uploads/${file.filename}`)
+          variantImagesMap.get(index).push(processedPath)
         }
-      })
+      }
     }
 
     let existingImages = []
@@ -678,11 +706,33 @@ exports.updateProduct = async (req, res) => {
       if (variants) {
         try {
           const parsedVariants = typeof variants === "string" ? JSON.parse(variants) : variants
+          if (!Array.isArray(parsedVariants)) {
+            throw new Error("Variants must be an array")
+          }
+
           updateData.variants = parsedVariants.map((variant, index) => {
+            // Auto-generate SKU if not provided
+            const sku =
+              variant.sku && variant.sku.trim()
+                ? variant.sku.trim()
+                : variant._id
+                  ? variant._id.toString().slice(-6).toUpperCase()
+                  : `SKU-${Date.now()}-${index}`
+
+            // Filter out options with empty values safely
+            const cleanOptions = (variant.options || []).filter((o) => {
+              const hasType = o.type && typeof o.type === "string" && o.type.trim() !== ""
+              const hasValue = o.value && typeof o.value === "string" && o.value.trim() !== ""
+              return hasType && hasValue
+            })
+
             const variantData = {
               ...variant,
+              sku,
+              options: cleanOptions,
               price: Number(variant.price) || 0,
               stock: Number(variant.stock) || 0,
+              status: variant.status || "active",
             }
 
             if (variant.comparePrice) {
@@ -691,8 +741,6 @@ exports.updateProduct = async (req, res) => {
 
             // Assign variant images if new ones are uploaded for this variant index
             if (variantImagesMap.has(index)) {
-              // Note: If you want to replace old images with new ones, you'd unlink old ones here.
-              // For simplicity, we just set the new images. 
               variantData.images = variantImagesMap.get(index)
             }
 
@@ -700,6 +748,11 @@ exports.updateProduct = async (req, res) => {
           })
         } catch (e) {
           console.error("Invalid variants format:", e)
+          return res.status(400).json({
+            success: false,
+            message: "Invalid variants data",
+            error: e.message,
+          })
         }
       }
     }

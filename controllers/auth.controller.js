@@ -183,14 +183,27 @@ exports.forgotPassword = async (req, res) => {
 
     // Email content
     const message = `
-      <h2>Password Reset Request</h2>
-      <p>Hello ${user.name},</p>
-      <p>You have requested to reset your password. Please click the link below to reset your password:</p>
-      <a href="${resetUrl}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-      <p>This link will expire in 1 hour.</p>
-      <p>If you didn't request this, please ignore this email.</p>
-      <br>
-      <p>Best regards,<br>Your E-commerce Team</p>
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
+        <div style="background-color: #f7733b; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Equal Fashion</h1>
+        </div>
+        <div style="padding: 30px; line-height: 1.6; color: #333;">
+          <h2 style="color: #f7733b; margin-top: 0;">Password Reset Request</h2>
+          <p>Hello <strong>${user.name}</strong>,</p>
+          <p>We received a request to reset your password for your Equal Fashion account. Click the button below to set a new password:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #f7733b; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset My Password</a>
+          </div>
+          <p>If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+          <p style="font-size: 12px; color: #777;">This link will expire in 1 hour for security reasons.</p>
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="margin-bottom: 0;">Best regards,</p>
+          <p style="margin-top: 5px;"><strong>Equal Fashion Team</strong></p>
+        </div>
+        <div style="background-color: #f9f9f9; padding: 15px; text-align: center; font-size: 12px; color: #999;">
+          &copy; ${new Date().getFullYear()} Equal Fashion. All rights reserved.
+        </div>
+      </div>
     `
 
     // Send email

@@ -10,6 +10,7 @@ const {
   addPartialPayment,
   confirmPayment,
   createOrderByAdmin,
+  updateOrderNotes,
 } = require("../controllers/order.controller")
 const { protect, admin } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
@@ -19,10 +20,11 @@ router.get("/", protect, admin, getOrders)
 router.get("/my-orders", protect, getMyOrders)
 router.get("/:id", protect, getOrder)
 router.post("/", protect, createOrder)
-router.post("/:id/payments", protect, upload.array("images", 5), addPartialPayment)
+router.post("/:id/payments", protect, upload.single("screenshot"), addPartialPayment)
 router.patch("/:id/payments/:paymentId/confirm", protect, admin, confirmPayment)
 router.patch("/:id/status", protect, admin, updateOrderStatus)
 router.patch("/:id/payment", protect, admin, updatePaymentStatus)
+router.patch("/:id/notes", protect, admin, updateOrderNotes)
 router.post("/admin", protect, admin, createOrderByAdmin)
 
 module.exports = router

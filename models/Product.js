@@ -30,7 +30,7 @@ const variationTypeSchema = new mongoose.Schema({
 
 // Variant Schema (specific combination like "Red, XL")
 const variantSchema = new mongoose.Schema({
-  sku: { type: String, required: true },
+  sku: { type: String, sparse: true },   // auto-generated if blank
   barcode: { type: String, unique: true, sparse: true },
   price: { type: Number, required: true, min: [0, "Variant price cannot be negative"] },
   comparePrice: { type: Number, min: [0, "Variant compare price cannot be negative"] },
@@ -45,7 +45,7 @@ const variantSchema = new mongoose.Schema({
   isDefault: { type: Boolean, default: false },
   status: {
     type: String,
-    enum: ["active", "inactive", "archived"],
+    enum: ["active", "inactive", "archived", "draft"],
     default: "active",
   },
 })

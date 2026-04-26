@@ -20,7 +20,7 @@ const saleRoutes = require("./routes/sale.routes")
 const purchaseRoutes = require("./routes/purchase.routes")
 const chatbotRoutes = require("./routes/routes.chatbot")
 const supplierRoutes = require("./routes/supplier.routes")
-
+const notificationRoutes = require("./routes/notification.routes")
 
 // Load env vars
 dotenv.config()
@@ -62,6 +62,7 @@ app.use('/api/chatbot', chatbotRoutes)
 app.use('/api/sales', saleRoutes)
 app.use('/api/purchases', purchaseRoutes)
 app.use("/api/suppliers", supplierRoutes)
+app.use("/api/notifications", notificationRoutes)
 
 
 // Error handling middleware

@@ -3,6 +3,7 @@ const Product = require("../models/Product")
 const User = require("../models/User")
 const mongoose = require("mongoose")
 const { sendEmail } = require("../services/email.service")
+const { createNotification } = require("./notification.controller")
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -259,6 +260,27 @@ exports.createOrder = async (req, res) => {
       notes,
     })
 
+    // Create notification for user
+    await createNotification({
+      recipient: req.user.id,
+      type: "order",
+      title: "Order Placed Successfully",
+      message: `Your order #${order._id.toString().slice(-8).toUpperCase()} has been placed and is being processed.`,
+      link: `/orders/${order._id}`,
+    })
+
+    // Create notification for admin
+    const adminUsers = await User.find({ role: "admin" })
+    for (const adminUser of adminUsers) {
+      await createNotification({
+        recipient: adminUser._id,
+        type: "order",
+        title: "New Order Received",
+        message: `New order #${order._id.toString().slice(-8).toUpperCase()} received from ${shippingAddress.name}.`,
+        link: `/admin/orders/${order._id}`,
+      })
+    }
+
     // Send confirmation email if user email exists
     if (shippingAddress.email) {
       try {
@@ -356,7 +378,8 @@ exports.createOrder = async (req, res) => {
 // @access  Private/Admin
 exports.addPartialPayment = async (req, res) => {
   try {
-    const { amount, method, transactionId, phoneNumber, notes } = req.body
+    const { amount, method, transactionId, accountNumber, notes } = req.body
+    
     // Validate ObjectId
     if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
@@ -382,26 +405,33 @@ exports.addPartialPayment = async (req, res) => {
     }
 
     // Check if payment amount exceeds due amount
-    if (amount > order.dueAmount) {
+    if (Number(amount) > order.dueAmount) {
       return res.status(400).json({
         success: false,
-        message: `Payment amount cannot exceed due amount of $${order.dueAmount}`,
+        message: `Payment amount cannot exceed due amount of ৳${order.dueAmount}`,
       })
     }
 
     // Add payment to payments array
-    order.payments.push({
-      amount,
+    const payment = {
+      amount: Number(amount),
       method,
       transactionId,
-      phoneNumber,
+      accountNumber,
       notes,
-      status: "confirmed",
-    })
+      status: "pending", // Payment needs admin confirmation
+    }
 
-    // Update paid amount
-    order.paidAmount += amount
+    // Handle screenshot file
+    if (req.file) {
+      payment.screenshot = `/uploads/${req.file.filename}`
+    }
 
+    order.payments.push(payment)
+
+    // Note: We don't update paidAmount yet, it's done after admin confirms in the pre-save hook 
+    // OR if we want it to be automatic if it's COD/etc. But here it's Manual.
+    
     await order.save()
 
     res.status(200).json({
@@ -477,6 +507,15 @@ exports.confirmPayment = async (req, res) => {
 
     await order.save()
 
+    // Create notification for user
+    await createNotification({
+      recipient: order.user,
+      type: "payment",
+      title: `Payment ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      message: `Your payment of ৳${payment.amount} for order #${order._id.toString().slice(-8).toUpperCase()} has been ${status}.`,
+      link: `/orders/${order._id}`,
+    })
+
     res.status(200).json({
       success: true,
       message: `Payment ${status} successfully`,
@@ -544,6 +583,15 @@ exports.updateOrderStatus = async (req, res) => {
     order.status = status
 
     await order.save()
+
+    // Create notification for user
+    await createNotification({
+      recipient: order.user,
+      type: "order",
+      title: "Order Status Updated",
+      message: `Your order #${order._id.toString().slice(-8).toUpperCase()} status has been updated to ${status}.`,
+      link: `/orders/${order._id}`,
+    })
 
     res.status(200).json({
       success: true,
@@ -695,5 +743,33 @@ exports.createOrderByAdmin = async (req, res) => {
       message: "Server error",
       error: error.message,
     })
+  }
+}
+
+// @desc    Update tracking info and admin notes
+// @route   PATCH /api/orders/:id/notes
+// @access  Private/Admin
+exports.updateOrderNotes = async (req, res) => {
+  try {
+    const { trackingInfo, adminNotes } = req.body
+
+    if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid order ID" })
+    }
+
+    const order = await Order.findById(req.params.id)
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" })
+    }
+
+    if (trackingInfo !== undefined) order.trackingInfo = trackingInfo
+    if (adminNotes !== undefined) order.adminNotes = adminNotes
+
+    await order.save()
+
+    res.status(200).json({ success: true, order })
+  } catch (error) {
+    console.error("Update order notes error:", error)
+    res.status(500).json({ success: false, message: "Server error", error: error.message })
   }
 }
