@@ -13,7 +13,7 @@ const createSlug = (name) => {
 // @access  Public
 exports.getBrands = async (req, res) => {
   try {
-    const { status } = req.query
+    const { status, search } = req.query
 
     // Build query
     const query = {}
@@ -21,6 +21,11 @@ exports.getBrands = async (req, res) => {
     // Filter by status
     if (status) {
       query.status = status
+    }
+
+    // Search by name
+    if (search) {
+      query.name = { $regex: search, $options: "i" }
     }
 
     const brands = await Brand.find(query).sort({ name: 1 })

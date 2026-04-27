@@ -130,6 +130,10 @@ const siteSettingsSchema = new mongoose.Schema(
       description: { type: String, default: "" },
       keywords: { type: String, default: "" },
     },
+    analytics: {
+      facebookPixelId: { type: String, default: "" },
+      googleAnalyticsId: { type: String, default: "" },
+    },
   },
   {
     timestamps: true,

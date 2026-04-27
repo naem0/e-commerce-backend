@@ -10,19 +10,40 @@ const { createNotification } = require("./notification.controller")
 // @access  Private/Admin
 exports.getOrders = async (req, res) => {
   try {
-    const { status, user, page = 1, limit = 10 } = req.query
+    const { status, paymentStatus, user, search, page = 1, limit = 10 } = req.query
 
     // Build query
     const query = {}
 
     // Filter by status
-    if (status) {
+    if (status && status !== "all") {
       query.status = status
+    }
+
+    // Filter by paymentStatus
+    if (paymentStatus && paymentStatus !== "all") {
+      query.paymentStatus = paymentStatus
     }
 
     // Filter by user
     if (user) {
       query.user = user
+    }
+
+    // Search by orderNumber, customer name, or email
+    if (search) {
+      // If search is a valid ObjectId, search by _id
+      if (mongoose.Types.ObjectId.isValid(search)) {
+        query._id = search
+      } else {
+        // Search by orderNumber (if it's a number-like string) or customer details in shippingAddress
+        query.$or = [
+          { orderNumber: { $regex: search, $options: "i" } },
+          { "shippingAddress.name": { $regex: search, $options: "i" } },
+          { "shippingAddress.email": { $regex: search, $options: "i" } },
+          { "shippingAddress.phone": { $regex: search, $options: "i" } },
+        ]
+      }
     }
 
     // Pagination
@@ -577,6 +598,10 @@ exports.updateOrderStatus = async (req, res) => {
     // If order is delivered
     if (status === "delivered") {
       order.deliveredAt = new Date()
+      // If it's COD, it's now paid
+      if (order.paymentMethod === "cash_on_delivery") {
+        order.paymentStatus = "paid"
+      }
     }
 
     // Update order status
@@ -585,11 +610,14 @@ exports.updateOrderStatus = async (req, res) => {
     await order.save()
 
     // Create notification for user
+    const isDelivered = status === "delivered"
     await createNotification({
       recipient: order.user,
       type: "order",
-      title: "Order Status Updated",
-      message: `Your order #${order._id.toString().slice(-8).toUpperCase()} status has been updated to ${status}.`,
+      title: isDelivered ? "Order Delivered! 🎁" : "Order Status Updated",
+      message: isDelivered 
+        ? `Your order #${order._id.toString().slice(-8).toUpperCase()} has been delivered. We'd love to hear your feedback! Click here to leave a review.`
+        : `Your order #${order._id.toString().slice(-8).toUpperCase()} status has been updated to ${status}.`,
       link: `/orders/${order._id}`,
     })
 
@@ -669,16 +697,47 @@ exports.updatePaymentStatus = async (req, res) => {
 
 // @desc    Create a new order by admin
 // @route   POST /api/orders/admin
+// @desc    Create a new order by admin
+// @route   POST /api/orders/admin
 // @access  Private/Admin
 exports.createOrderByAdmin = async (req, res) => { 
   try {
-    const { user, items, status, total } = req.body
+    const { user, items, status, total, shippingAddress, paymentMethod } = req.body
 
-    if (!user || !items || items.length === 0) {
+    if (!items || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Please provide user, items, status and total",
+        message: "Please provide order items",
       })
+    }
+
+    // If user is provided, verify it
+    let userDoc = null
+    let finalShippingAddress = shippingAddress
+
+    if (user) {
+      userDoc = await require("../models/User").findById(user)
+      if (!userDoc) {
+        return res.status(404).json({ success: false, message: "User not found" })
+      }
+      
+      // If no shipping address provided by admin, use user's default address
+      if (!finalShippingAddress && userDoc.address) {
+        finalShippingAddress = {
+          name: userDoc.name,
+          email: userDoc.email,
+          phone: userDoc.phone,
+          street: userDoc.address.street || "",
+          city: userDoc.address.city || "",
+          state: userDoc.address.state || "",
+          zipCode: userDoc.address.zipCode || "",
+          country: userDoc.address.country || "Bangladesh",
+        }
+      }
+    }
+
+    if (!finalShippingAddress) {
+      return res.status(400).json({ success: false, message: "Shipping address is required" })
     }
 
     // Verify items and calculate prices
@@ -722,10 +781,12 @@ exports.createOrderByAdmin = async (req, res) => {
 
     // Create order
     const order = await Order.create({
-      user,
+      user: user || null,
       items: orderItems,
-      status,
-      total,
+      status: status || "pending",
+      paymentMethod: paymentMethod || "cash_on_delivery",
+      shippingAddress: finalShippingAddress,
+      total: total || subtotal,
       subtotal,
       tax: 0,
       shippingCost: 0,
@@ -751,7 +812,7 @@ exports.createOrderByAdmin = async (req, res) => {
 // @access  Private/Admin
 exports.updateOrderNotes = async (req, res) => {
   try {
-    const { trackingInfo, adminNotes } = req.body
+    const { trackingInfo, adminNotes, shippingAddress, paymentStatus } = req.body
 
     if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: "Invalid order ID" })
@@ -764,6 +825,13 @@ exports.updateOrderNotes = async (req, res) => {
 
     if (trackingInfo !== undefined) order.trackingInfo = trackingInfo
     if (adminNotes !== undefined) order.adminNotes = adminNotes
+    if (paymentStatus !== undefined) order.paymentStatus = paymentStatus
+    if (shippingAddress !== undefined) {
+      order.shippingAddress = {
+        ...order.shippingAddress,
+        ...shippingAddress
+      }
+    }
 
     await order.save()
 

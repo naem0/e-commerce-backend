@@ -8,16 +8,29 @@ const mongoose = require("mongoose")
 // @access  Private/Admin
 exports.getReviews = async (req, res) => {
   try {
-    const { status, product, user, page = 1, limit = 10 } = req.query
+    const { status, product, user, search, page = 1, limit = 10 } = req.query
 
     // Build query
     const query = {}
 
-    if (status  && status !== "all") query.status = status
-    if (product) query.product = product
-    if (user) query.user = user
+    if (status) {
+      query.status = status
+    }
 
-    // Pagination
+    if (product) {
+      query.product = product
+    }
+
+    if (user) {
+      query.user = user
+    }
+
+    // Search by comment or product name (via population or separate query)
+    // Since we are using find(query), searching by product name requires either a join or a list of product IDs.
+    // Let's search in the comment first.
+    if (search) {
+      query.comment = { $regex: search, $options: "i" }
+    }  // Pagination
     const skip = (Number(page) - 1) * Number(limit)
 
     const reviews = await Review.find(query)
@@ -267,10 +280,43 @@ exports.updateReviewStatus = async (req, res) => {
     }
     res.status(200).json({
       success: true,
+      message: "Review status updated",
       review,
     })
   } catch (error) {
     console.error("Update review status error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    })
+  }
+}
+
+// @desc    Mark review as helpful
+// @route   PATCH /api/reviews/:id/helpful
+// @access  Public
+exports.markHelpful = async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id)
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "Review not found",
+      })
+    }
+
+    review.helpful = (review.helpful || 0) + 1
+    await review.save()
+
+    res.status(200).json({
+      success: true,
+      message: "Review marked as helpful",
+      helpful: review.helpful,
+    })
+  } catch (error) {
+    console.error("Mark helpful error:", error)
     res.status(500).json({
       success: false,
       message: "Server error",

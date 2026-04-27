@@ -14,9 +14,9 @@ const upload = require("../middleware/upload.middleware")
 
 // Public routes
 router.get("/", getCategories)
+router.get("/tree/all", getCategoryTree)
 router.get("/:id", getCategory)
 router.get("/slug/:slug", getCategoryBySlug)
-router.get("/tree/all", getCategoryTree)
 // Protected routes
 router.post("/", protect, admin, upload.single("image"), createCategory)
 router.put("/:id", protect, admin, upload.single("image"), updateCategory)

@@ -7,12 +7,14 @@ const {
   updateReviewStatus,
   addAdminResponse,
   deleteReview,
+  markHelpful,
 } = require("../controllers/review.controller")
 const { protect, admin } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
 
 // Public routes
 router.get("/product/:productId", getProductReviews)
+router.patch("/:id/helpful", markHelpful)
 
 // Protected routes
 router.post("/", protect, upload.array("images", 5), createReview)
