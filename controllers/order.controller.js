@@ -475,11 +475,11 @@ exports.addPartialPayment = async (req, res) => {
 // @access  Private/Admin
 exports.confirmPayment = async (req, res) => {
   try {
-    const { orderId, paymentId } = req.params
+    const { id, paymentId } = req.params
     const { status, adminNote } = req.body
 
     // Validate ObjectIds
-    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid order ID",
@@ -493,7 +493,7 @@ exports.confirmPayment = async (req, res) => {
       })
     }
 
-    const order = await Order.findById(orderId)
+    const order = await Order.findById(id)
     if (!order) {
       return res.status(404).json({
         success: false,

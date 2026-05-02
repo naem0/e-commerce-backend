@@ -44,8 +44,17 @@ const reviewSchema = new mongoose.Schema(
       default: "pending",
     },
     adminResponse: {
-      type: String,
-      trim: true,
+      message: {
+        type: String,
+        trim: true,
+      },
+      respondedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      respondedAt: {
+        type: Date,
+      },
     },
     helpful: {
       type: Number,
