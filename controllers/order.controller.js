@@ -779,6 +779,10 @@ exports.createOrderByAdmin = async (req, res) => {
       await product.save()
     }
 
+    // Calculate shipping cost
+    const shippingCost = finalShippingAddress.shippingArea === "outside_dhaka" ? 120 : 70
+    const finalTotal = total || (subtotal + shippingCost)
+
     // Create order
     const order = await Order.create({
       user: user || null,
@@ -786,10 +790,10 @@ exports.createOrderByAdmin = async (req, res) => {
       status: status || "pending",
       paymentMethod: paymentMethod || "cash_on_delivery",
       shippingAddress: finalShippingAddress,
-      total: total || subtotal,
+      total: finalTotal,
       subtotal,
       tax: 0,
-      shippingCost: 0,
+      shippingCost: shippingCost,
       paidAmount: 0,
     })
 
@@ -827,9 +831,18 @@ exports.updateOrderNotes = async (req, res) => {
     if (adminNotes !== undefined) order.adminNotes = adminNotes
     if (paymentStatus !== undefined) order.paymentStatus = paymentStatus
     if (shippingAddress !== undefined) {
+      const oldArea = order.shippingAddress.shippingArea
       order.shippingAddress = {
         ...order.shippingAddress,
         ...shippingAddress
+      }
+      
+      // If shipping area changed, update shipping cost and total
+      if (shippingAddress.shippingArea && shippingAddress.shippingArea !== oldArea) {
+        const oldCost = order.shippingCost || 0
+        const newCost = shippingAddress.shippingArea === "outside_dhaka" ? 120 : 70
+        order.shippingCost = newCost
+        order.total = (order.total - oldCost) + newCost
       }
     }
 

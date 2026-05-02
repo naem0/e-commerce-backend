@@ -33,7 +33,7 @@ exports.getUserProfile = async (req, res) => {
 // @access  Private/Admin
 exports.getUsers = async (req, res) => {
   try {
-    const { role, search, page = 1, limit = 10 } = req.query
+    const { role, status, search, page = 1, limit = 10 } = req.query
 
     // Build query
     const query = {}
@@ -41,6 +41,11 @@ exports.getUsers = async (req, res) => {
     // Filter by role
     if (role && role !== "all") {
       query.role = role
+    }
+
+    // Filter by status
+    if (status && status !== "all") {
+      query.status = status
     }
 
     // Search by name or email
