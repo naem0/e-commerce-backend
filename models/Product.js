@@ -17,7 +17,7 @@ const generateBarcode = () => {
 // Variation Option Schema (e.g. "Red", "Blue" for color)
 const variationOptionSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  value: { type: String, required: true },
+  value: { type: String },
   additionalPrice: { type: Number, default: 0 },
   image: { type: String },
 })
