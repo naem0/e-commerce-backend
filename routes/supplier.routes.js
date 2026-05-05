@@ -8,11 +8,11 @@ const {
   deleteSupplier,
   getSupplierStats,
 } = require("../controllers/supplier.controller")
-const { protect, admin } = require("../middleware/auth.middleware")
+const { protect, admin, authorize } = require("../middleware/auth.middleware")
 
 // Apply authentication middleware to all routes
 router.use(protect)
-router.use(admin)
+router.use(authorize("admin", "manager"))
 
 // Routes
 router.get("/stats/:id?", getSupplierStats)

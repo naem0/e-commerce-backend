@@ -148,8 +148,9 @@ exports.getOrder = async (req, res) => {
       })
     }
 
-    // Check if the order belongs to the logged-in user or if the user is an admin
-    if (order.user._id.toString() !== req.user.id && req.user.role !== "admin") {
+    // Check if the order belongs to the logged-in user or if the user is an admin/manager
+    const isAuthorized = req.user.role === "admin" || req.user.role === "manager"
+    if (order.user._id.toString() !== req.user.id && !isAuthorized) {
       return res.status(403).json({
         success: false,
         message: "Not authorized to access this order",
@@ -290,8 +291,8 @@ exports.createOrder = async (req, res) => {
       link: `/orders/${order._id}`,
     })
 
-    // Create notification for admin
-    const adminUsers = await User.find({ role: "admin" })
+    // Create notification for admin and manager
+    const adminUsers = await User.find({ role: { $in: ["admin", "manager"] } })
     for (const adminUser of adminUsers) {
       await createNotification({
         recipient: adminUser._id,

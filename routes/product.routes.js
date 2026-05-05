@@ -25,7 +25,7 @@ const {
   updateBestSale,
 } = require("../controllers/product.controller")
 
-const { protect, admin } = require("../middleware/auth.middleware")
+const { protect, admin, authorize } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
 
 // Public routes
@@ -39,23 +39,23 @@ router.route("/:id/related").get(getRelatedProducts)
 router.route("/:id/variants").get(getProductVariants)
 
 // Protected routes (Admin only)
-router.route("/").post(protect, admin, upload.any(), createProduct)
-router.route("/:id").put(protect, admin, upload.any(), updateProduct)
-router.route("/:id").delete(protect, admin, deleteProduct)
-router.route("/:id/status").patch(protect, admin, updateProductStatus)
-router.route("/:id/generate-barcode").post(protect, admin, generateBarcode)
-router.route("/:id/print-barcode").get(protect, admin, printBarcode)
-router.route("/:id/flash-sale").patch(protect, admin, updateFlashSale)
-router.route("/:id/best-sale").patch(protect, admin, updateBestSale)
+router.route("/").post(protect, authorize("admin", "manager"), upload.any(), createProduct)
+router.route("/:id").put(protect, authorize("admin", "manager"), upload.any(), updateProduct)
+router.route("/:id").delete(protect, authorize("admin", "manager"), deleteProduct)
+router.route("/:id/status").patch(protect, authorize("admin", "manager"), updateProductStatus)
+router.route("/:id/generate-barcode").post(protect, authorize("admin", "manager"), generateBarcode)
+router.route("/:id/print-barcode").get(protect, authorize("admin", "manager"), printBarcode)
+router.route("/:id/flash-sale").patch(protect, authorize("admin", "manager"), updateFlashSale)
+router.route("/:id/best-sale").patch(protect, authorize("admin", "manager"), updateBestSale)
 
 // Variant management routes
-router.route("/:id/variants").post(protect, admin, upload.any(), addProductVariant)
-router.route("/:id/variants/:variantId").put(protect, admin, upload.any(), updateProductVariant)
-router.route("/:id/variants/:variantId").delete(protect, admin, deleteProductVariant)
-router.route("/:id/variation-types").put(protect, admin, updateVariationTypes)
+router.route("/:id/variants").post(protect, authorize("admin", "manager"), upload.any(), addProductVariant)
+router.route("/:id/variants/:variantId").put(protect, authorize("admin", "manager"), upload.any(), updateProductVariant)
+router.route("/:id/variants/:variantId").delete(protect, authorize("admin", "manager"), deleteProductVariant)
+router.route("/:id/variation-types").put(protect, authorize("admin", "manager"), updateVariationTypes)
 
 // Bulk operations
-router.route("/bulk-stock-update").put(protect, admin, bulkStockUpdate)
+router.route("/bulk-stock-update").put(protect, authorize("admin", "manager"), bulkStockUpdate)
 
 // Review routes (Protected - User)
 router.route("/:id/reviews").post(protect, addProductReview)

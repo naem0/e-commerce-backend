@@ -9,7 +9,7 @@ const {
   deleteReview,
   markHelpful,
 } = require("../controllers/review.controller")
-const { protect, admin } = require("../middleware/auth.middleware")
+const { protect, admin, authorize } = require("../middleware/auth.middleware")
 const upload = require("../middleware/upload.middleware")
 
 // Public routes
@@ -20,9 +20,9 @@ router.patch("/:id/helpful", markHelpful)
 router.post("/", protect, upload.array("images", 5), createReview)
 
 // Admin routes
-router.get("/", protect, admin, getReviews)
-router.patch("/:id/status", protect, admin, updateReviewStatus)
-router.post("/:id/response", protect, admin, addAdminResponse)
-router.delete("/:id", protect, admin, deleteReview)
+router.get("/", protect, authorize("admin", "manager"), getReviews)
+router.patch("/:id/status", protect, authorize("admin", "manager"), updateReviewStatus)
+router.post("/:id/response", protect, authorize("admin", "manager"), addAdminResponse)
+router.delete("/:id", protect, authorize("admin", "manager"), deleteReview)
 
 module.exports = router
